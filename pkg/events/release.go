@@ -6,10 +6,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const KindSoftwareRelease = 30063
+const KindRelease = 30063
 
-// SoftwareRelease represents a parsed Software Release event (kind 30063).
-type SoftwareRelease struct {
+// Release represents a parsed Software Release event (kind 30063).
+type Release struct {
 	// Required fields
 	I        string   // App identifier (must match 'd' tag from application)
 	Version  string   // Release version (e.g., "1.2.3", "v0.1.2-rc1")
@@ -21,14 +21,14 @@ type SoftwareRelease struct {
 	Content string // Full release notes, markdown allowed
 }
 
-// ParseSoftwareRelease extracts a SoftwareRelease from a nostr.Event.
+// ParseRelease extracts a Release from a nostr.Event.
 // Returns an error if the event kind is wrong or if duplicate singular tags are found.
-func ParseSoftwareRelease(event *nostr.Event) (SoftwareRelease, error) {
-	if event.Kind != KindSoftwareRelease {
-		return SoftwareRelease{}, fmt.Errorf("invalid kind: expected %d, got %d", KindSoftwareRelease, event.Kind)
+func ParseRelease(event *nostr.Event) (Release, error) {
+	if event.Kind != KindRelease {
+		return Release{}, fmt.Errorf("invalid kind: expected %d, got %d", KindRelease, event.Kind)
 	}
 
-	release := SoftwareRelease{Content: event.Content}
+	release := Release{Content: event.Content}
 
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
@@ -38,25 +38,25 @@ func ParseSoftwareRelease(event *nostr.Event) (SoftwareRelease, error) {
 		switch tag[0] {
 		case "i":
 			if release.I != "" {
-				return SoftwareRelease{}, fmt.Errorf("duplicate 'i' tag")
+				return Release{}, fmt.Errorf("duplicate 'i' tag")
 			}
 			release.I = tag[1]
 
 		case "version":
 			if release.Version != "" {
-				return SoftwareRelease{}, fmt.Errorf("duplicate 'version' tag")
+				return Release{}, fmt.Errorf("duplicate 'version' tag")
 			}
 			release.Version = tag[1]
 
 		case "d":
 			if release.D != "" {
-				return SoftwareRelease{}, fmt.Errorf("duplicate 'd' tag")
+				return Release{}, fmt.Errorf("duplicate 'd' tag")
 			}
 			release.D = tag[1]
 
 		case "c":
 			if release.Channel != "" {
-				return SoftwareRelease{}, fmt.Errorf("duplicate 'c' tag")
+				return Release{}, fmt.Errorf("duplicate 'c' tag")
 			}
 			release.Channel = tag[1]
 
@@ -68,7 +68,7 @@ func ParseSoftwareRelease(event *nostr.Event) (SoftwareRelease, error) {
 }
 
 // Validate checks that all required fields are present and valid.
-func (r SoftwareRelease) Validate() error {
+func (r Release) Validate() error {
 	if r.I == "" {
 		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
 	}
@@ -98,9 +98,9 @@ func (r SoftwareRelease) Validate() error {
 	return nil
 }
 
-// ValidateSoftwareRelease parses and validates a Software Release event.
-func ValidateSoftwareRelease(event *nostr.Event) error {
-	release, err := ParseSoftwareRelease(event)
+// ValidateRelease parses and validates a Software Release event.
+func ValidateRelease(event *nostr.Event) error {
+	release, err := ParseRelease(event)
 	if err != nil {
 		return err
 	}

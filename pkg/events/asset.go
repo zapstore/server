@@ -6,10 +6,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const KindSoftwareAsset = 3063
+const KindAsset = 3063
 
-// SoftwareAsset represents a parsed Software Asset event (kind 3063).
-type SoftwareAsset struct {
+// Asset represents a parsed Software Asset event (kind 3063).
+type Asset struct {
 	// Required fields
 	I         string   // App identifier (reverse-domain, e.g. com.example.app)
 	Hash      string   // SHA-256 hash of the asset
@@ -35,19 +35,19 @@ type SoftwareAsset struct {
 	Executables           []string // Regex paths to executables (CLI)
 }
 
-// ParseSoftwareAsset extracts a SoftwareAsset from a nostr.Event.
+// ParseAsset extracts a Asset from a nostr.Event.
 // Returns an error if the event kind is wrong, content is not empty,
 // or if duplicate singular tags are found.
-func ParseSoftwareAsset(event *nostr.Event) (SoftwareAsset, error) {
-	if event.Kind != KindSoftwareAsset {
-		return SoftwareAsset{}, fmt.Errorf("invalid kind: expected %d, got %d", KindSoftwareAsset, event.Kind)
+func ParseAsset(event *nostr.Event) (Asset, error) {
+	if event.Kind != KindAsset {
+		return Asset{}, fmt.Errorf("invalid kind: expected %d, got %d", KindAsset, event.Kind)
 	}
 
 	if event.Content != "" {
-		return SoftwareAsset{}, fmt.Errorf("content must be empty for Software Asset events")
+		return Asset{}, fmt.Errorf("content must be empty for Software Asset events")
 	}
 
-	asset := SoftwareAsset{}
+	asset := Asset{}
 
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
@@ -57,19 +57,19 @@ func ParseSoftwareAsset(event *nostr.Event) (SoftwareAsset, error) {
 		switch tag[0] {
 		case "i":
 			if asset.I != "" {
-				return SoftwareAsset{}, fmt.Errorf("duplicate 'i' tag")
+				return Asset{}, fmt.Errorf("duplicate 'i' tag")
 			}
 			asset.I = tag[1]
 
 		case "x":
 			if asset.Hash != "" {
-				return SoftwareAsset{}, fmt.Errorf("duplicate 'x' tag")
+				return Asset{}, fmt.Errorf("duplicate 'x' tag")
 			}
 			asset.Hash = tag[1]
 
 		case "version":
 			if asset.Version != "" {
-				return SoftwareAsset{}, fmt.Errorf("duplicate 'version' tag")
+				return Asset{}, fmt.Errorf("duplicate 'version' tag")
 			}
 			asset.Version = tag[1]
 
@@ -125,7 +125,7 @@ func ParseSoftwareAsset(event *nostr.Event) (SoftwareAsset, error) {
 }
 
 // Validate checks that all required fields are present and valid.
-func (a *SoftwareAsset) Validate() error {
+func (a *Asset) Validate() error {
 	if a.I == "" {
 		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
 	}
@@ -152,9 +152,9 @@ func (a *SoftwareAsset) Validate() error {
 	return nil
 }
 
-// ValidateSoftwareAsset parses and validates a Software Asset event.
-func ValidateSoftwareAsset(event *nostr.Event) error {
-	asset, err := ParseSoftwareAsset(event)
+// ValidateAsset parses and validates a Software Asset event.
+func ValidateAsset(event *nostr.Event) error {
+	asset, err := ParseAsset(event)
 	if err != nil {
 		return err
 	}

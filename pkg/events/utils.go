@@ -9,7 +9,7 @@ import (
 
 // IsZapstoreEvent returns true if the event is a supported Zapstore event type.
 func IsZapstoreEvent(e *nostr.Event) bool {
-	return e.Kind == KindSoftwareApp || e.Kind == KindSoftwareRelease || e.Kind == KindSoftwareAsset
+	return e.Kind == KindApp || e.Kind == KindRelease || e.Kind == KindAsset
 }
 
 // ValidateZapstore validates a Zapstore event by routing to the appropriate
@@ -17,12 +17,12 @@ func IsZapstoreEvent(e *nostr.Event) bool {
 // kind is not a supported Zapstore event type.
 func ValidateZapstore(event *nostr.Event) error {
 	switch event.Kind {
-	case KindSoftwareApp:
-		return ValidateSoftwareApp(event)
-	case KindSoftwareRelease:
-		return ValidateSoftwareRelease(event)
-	case KindSoftwareAsset:
-		return ValidateSoftwareAsset(event)
+	case KindApp:
+		return ValidateApp(event)
+	case KindRelease:
+		return ValidateRelease(event)
+	case KindAsset:
+		return ValidateAsset(event)
 	default:
 		return fmt.Errorf("event kind %d not supported in Zapstore", event.Kind)
 	}

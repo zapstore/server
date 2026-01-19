@@ -6,10 +6,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-const KindSoftwareApp = 32267
+const KindApp = 32267
 
-// SoftwareApp represents a parsed Software Application event (kind 32267).
-type SoftwareApp struct {
+// App represents a parsed Software Application event (kind 32267).
+type App struct {
 	// Required fields
 	D         string   // App identifier (reverse-domain recommended, e.g. com.example.app)
 	Name      string   // Human-readable project name
@@ -26,14 +26,14 @@ type SoftwareApp struct {
 	License    string   // SPDX license ID
 }
 
-// ParseSoftwareApp extracts a SoftwareApp from a nostr.Event.
+// ParseApp extracts a App from a nostr.Event.
 // Returns an error if the event kind is wrong or if duplicate singular tags are found.
-func ParseSoftwareApp(event *nostr.Event) (SoftwareApp, error) {
-	if event.Kind != KindSoftwareApp {
-		return SoftwareApp{}, fmt.Errorf("invalid kind: expected %d, got %d", KindSoftwareApp, event.Kind)
+func ParseApp(event *nostr.Event) (App, error) {
+	if event.Kind != KindApp {
+		return App{}, fmt.Errorf("invalid kind: expected %d, got %d", KindApp, event.Kind)
 	}
 
-	app := SoftwareApp{Content: event.Content}
+	app := App{Content: event.Content}
 
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
@@ -43,13 +43,13 @@ func ParseSoftwareApp(event *nostr.Event) (SoftwareApp, error) {
 		switch tag[0] {
 		case "d":
 			if app.D != "" {
-				return SoftwareApp{}, fmt.Errorf("duplicate 'd' tag")
+				return App{}, fmt.Errorf("duplicate 'd' tag")
 			}
 			app.D = tag[1]
 
 		case "name":
 			if app.Name != "" {
-				return SoftwareApp{}, fmt.Errorf("duplicate 'name' tag")
+				return App{}, fmt.Errorf("duplicate 'name' tag")
 			}
 			app.Name = tag[1]
 
@@ -81,7 +81,7 @@ func ParseSoftwareApp(event *nostr.Event) (SoftwareApp, error) {
 	return app, nil
 }
 
-func (app SoftwareApp) Validate() error {
+func (app App) Validate() error {
 	if app.D == "" {
 		return fmt.Errorf("missing or empty 'd' tag (app identifier)")
 	}
@@ -99,9 +99,9 @@ func (app SoftwareApp) Validate() error {
 	return nil
 }
 
-// ValidateSoftwareApp parses and validates a Software Application event.
-func ValidateSoftwareApp(event *nostr.Event) error {
-	app, err := ParseSoftwareApp(event)
+// ValidateApp parses and validates a Software Application event.
+func ValidateApp(event *nostr.Event) error {
+	app, err := ParseApp(event)
 	if err != nil {
 		return err
 	}
