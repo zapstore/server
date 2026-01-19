@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/zapstore/server/pkg/events/legacy"
 )
 
 // IsZapstoreEvent returns true if the event is a supported Zapstore event type.
 func IsZapstoreEvent(e *nostr.Event) bool {
-	return e.Kind == KindApp || e.Kind == KindRelease || e.Kind == KindAsset
+	return e.Kind == KindApp || e.Kind == KindRelease || e.Kind == KindAsset || legacy.IsZapstoreEvent(e)
 }
 
 // ValidateZapstore validates a Zapstore event by routing to the appropriate

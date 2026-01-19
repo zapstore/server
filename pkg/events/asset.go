@@ -2,6 +2,7 @@ package events
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -9,6 +10,7 @@ import (
 const KindAsset = 3063
 
 // Asset represents a parsed Software Asset event (kind 3063).
+// Learn more here: https://github.com/franzaps/nips/blob/applications/82.md
 type Asset struct {
 	// Required fields
 	I         string   // App identifier (reverse-domain, e.g. com.example.app)
@@ -35,6 +37,34 @@ type Asset struct {
 	Executables           []string // Regex paths to executables (CLI)
 }
 
+// Validate checks that all required fields are present and valid.
+func (a *Asset) Validate() error {
+	if a.I == "" {
+		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
+	}
+	if a.Hash == "" {
+		return fmt.Errorf("missing or empty 'x' tag (SHA-256 hash)")
+	}
+	if a.Version == "" {
+		return fmt.Errorf("missing or empty 'version' tag")
+	}
+	if len(a.Platforms) == 0 {
+		return fmt.Errorf("missing 'f' tag (platform identifier)")
+	}
+	for i, p := range a.Platforms {
+		if !slices.Contains(PlatformIdentifiers, p) {
+			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
+		}
+	}
+
+	// Validate SHA-256 hash format
+	if err := ValidateHash(a.Hash); err != nil {
+		return fmt.Errorf("invalid SHA-256 hash in 'x' tag: %w", err)
+	}
+
+	return nil
+}
+
 // ParseAsset extracts a Asset from a nostr.Event.
 // Returns an error if the event kind is wrong, content is not empty,
 // or if duplicate singular tags are found.
@@ -43,12 +73,7 @@ func ParseAsset(event *nostr.Event) (Asset, error) {
 		return Asset{}, fmt.Errorf("invalid kind: expected %d, got %d", KindAsset, event.Kind)
 	}
 
-	if event.Content != "" {
-		return Asset{}, fmt.Errorf("content must be empty for Software Asset events")
-	}
-
 	asset := Asset{}
-
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
 			continue
@@ -122,34 +147,6 @@ func ParseAsset(event *nostr.Event) (Asset, error) {
 	}
 
 	return asset, nil
-}
-
-// Validate checks that all required fields are present and valid.
-func (a *Asset) Validate() error {
-	if a.I == "" {
-		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
-	}
-	if a.Hash == "" {
-		return fmt.Errorf("missing or empty 'x' tag (SHA-256 hash)")
-	}
-	if a.Version == "" {
-		return fmt.Errorf("missing or empty 'version' tag")
-	}
-	if len(a.Platforms) == 0 {
-		return fmt.Errorf("missing 'f' tag (platform identifier)")
-	}
-	for i, p := range a.Platforms {
-		if p == "" {
-			return fmt.Errorf("empty 'f' tag at index %d", i)
-		}
-	}
-
-	// Validate SHA-256 hash format
-	if err := ValidateHash(a.Hash); err != nil {
-		return fmt.Errorf("invalid SHA-256 hash in 'x' tag: %w", err)
-	}
-
-	return nil
 }
 
 // ValidateAsset parses and validates a Software Asset event.

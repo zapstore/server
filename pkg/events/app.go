@@ -2,13 +2,30 @@ package events
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/nbd-wtf/go-nostr"
 )
 
 const KindApp = 32267
 
+var PlatformIdentifiers = []string{
+	"android-arm64-v8a",
+	"android-armeabi-v7a",
+	"android-x86",
+	"android-x86_64",
+	"darwin-arm64",
+	"darwin-x86_64",
+	"linux-aarch64",
+	"linux-x86_64",
+	"windows-aarch64",
+	"windows-x86_64",
+	"ios-arm64",
+	"web",
+}
+
 // App represents a parsed Software Application event (kind 32267).
+// Learn more here: https://github.com/franzaps/nips/blob/applications/82.md
 type App struct {
 	// Required fields
 	D         string   // App identifier (reverse-domain recommended, e.g. com.example.app)
@@ -26,6 +43,24 @@ type App struct {
 	License    string   // SPDX license ID
 }
 
+func (app App) Validate() error {
+	if app.D == "" {
+		return fmt.Errorf("missing or empty 'd' tag (app identifier)")
+	}
+	if app.Name == "" {
+		return fmt.Errorf("missing or empty 'name' tag")
+	}
+	if len(app.Platforms) == 0 {
+		return fmt.Errorf("missing 'f' tag (platform identifier)")
+	}
+	for i, p := range app.Platforms {
+		if !slices.Contains(PlatformIdentifiers, p) {
+			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
+		}
+	}
+	return nil
+}
+
 // ParseApp extracts a App from a nostr.Event.
 // Returns an error if the event kind is wrong or if duplicate singular tags are found.
 func ParseApp(event *nostr.Event) (App, error) {
@@ -34,7 +69,6 @@ func ParseApp(event *nostr.Event) (App, error) {
 	}
 
 	app := App{Content: event.Content}
-
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
 			continue
@@ -79,24 +113,6 @@ func ParseApp(event *nostr.Event) (App, error) {
 		}
 	}
 	return app, nil
-}
-
-func (app App) Validate() error {
-	if app.D == "" {
-		return fmt.Errorf("missing or empty 'd' tag (app identifier)")
-	}
-	if app.Name == "" {
-		return fmt.Errorf("missing or empty 'name' tag")
-	}
-	if len(app.Platforms) == 0 {
-		return fmt.Errorf("missing 'f' tag (platform identifier)")
-	}
-	for i, p := range app.Platforms {
-		if p == "" {
-			return fmt.Errorf("empty 'f' tag at index %d", i)
-		}
-	}
-	return nil
 }
 
 // ValidateApp parses and validates a Software Application event.

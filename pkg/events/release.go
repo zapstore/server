@@ -9,6 +9,7 @@ import (
 const KindRelease = 30063
 
 // Release represents a parsed Software Release event (kind 30063).
+// Learn more here: https://github.com/franzaps/nips/blob/applications/82.md
 type Release struct {
 	// Required fields
 	I        string   // App identifier (must match 'd' tag from application)
@@ -19,6 +20,37 @@ type Release struct {
 
 	// Content
 	Content string // Full release notes, markdown allowed
+}
+
+// Validate checks that all required fields are present and valid.
+func (r Release) Validate() error {
+	if r.I == "" {
+		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
+	}
+	if r.Version == "" {
+		return fmt.Errorf("missing or empty 'version' tag")
+	}
+	if r.D == "" {
+		return fmt.Errorf("missing or empty 'd' tag")
+	}
+	if r.Channel == "" {
+		return fmt.Errorf("missing or empty 'c' tag (channel ID)")
+	}
+	if len(r.AssetIDs) == 0 {
+		return fmt.Errorf("missing 'e' tag (asset ID)")
+	}
+	for i, id := range r.AssetIDs {
+		if id == "" {
+			return fmt.Errorf("empty 'e' tag at index %d", i)
+		}
+	}
+
+	// Validate that 'd' tag equals 'i' + '@' + 'version'
+	expectedD := r.I + "@" + r.Version
+	if r.D != expectedD {
+		return fmt.Errorf("invalid 'd' tag: expected '%s', got '%s'", expectedD, r.D)
+	}
+	return nil
 }
 
 // ParseRelease extracts a Release from a nostr.Event.
@@ -65,37 +97,6 @@ func ParseRelease(event *nostr.Event) (Release, error) {
 		}
 	}
 	return release, nil
-}
-
-// Validate checks that all required fields are present and valid.
-func (r Release) Validate() error {
-	if r.I == "" {
-		return fmt.Errorf("missing or empty 'i' tag (app identifier)")
-	}
-	if r.Version == "" {
-		return fmt.Errorf("missing or empty 'version' tag")
-	}
-	if r.D == "" {
-		return fmt.Errorf("missing or empty 'd' tag")
-	}
-	if r.Channel == "" {
-		return fmt.Errorf("missing or empty 'c' tag (channel ID)")
-	}
-	if len(r.AssetIDs) == 0 {
-		return fmt.Errorf("missing 'e' tag (asset ID)")
-	}
-	for i, id := range r.AssetIDs {
-		if id == "" {
-			return fmt.Errorf("empty 'e' tag at index %d", i)
-		}
-	}
-
-	// Validate that 'd' tag equals 'i' + '@' + 'version'
-	expectedD := r.I + "@" + r.Version
-	if r.D != expectedD {
-		return fmt.Errorf("invalid 'd' tag: expected '%s', got '%s'", expectedD, r.D)
-	}
-	return nil
 }
 
 // ValidateRelease parses and validates a Software Release event.

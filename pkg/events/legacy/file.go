@@ -71,8 +71,8 @@ func (f File) Validate() error {
 		return fmt.Errorf("missing 'f' tags")
 	}
 	for i, p := range f.Platforms {
-		if p == "" {
-			return fmt.Errorf("empty 'f' tag at index %d", i)
+		if !slices.Contains(PlatformIdentifiers, p) {
+			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
 		}
 	}
 

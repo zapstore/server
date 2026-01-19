@@ -2,12 +2,28 @@ package legacy
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 )
 
 const KindApp = 32267
+
+var PlatformIdentifiers = []string{
+	"android-arm64-v8a",
+	"android-armeabi-v7a",
+	"android-x86",
+	"android-x86_64",
+	"darwin-arm64",
+	"darwin-x86_64",
+	"linux-aarch64",
+	"linux-x86_64",
+	"windows-aarch64",
+	"windows-x86_64",
+	"ios-arm64",
+	"web",
+}
 
 // App represents a parsed Software Application event (kind 32267).
 // It's a legacy version of the new Software Application event (kind 32267).
@@ -37,8 +53,8 @@ func (app App) Validate(pubkey string) error {
 		return fmt.Errorf("missing 'f' tag (platform identifier)")
 	}
 	for i, p := range app.Platforms {
-		if p == "" {
-			return fmt.Errorf("empty 'f' tag at index %d", i)
+		if !slices.Contains(PlatformIdentifiers, p) {
+			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
 		}
 	}
 
