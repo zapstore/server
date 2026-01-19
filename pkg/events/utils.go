@@ -39,6 +39,9 @@ func ValidateZapstore(event *nostr.Event) error {
 	case legacy.KindFile:
 		return legacy.ValidateFile(event)
 
+	case KindAppSet:
+		return ValidateAppSet(event)
+
 	default:
 		return fmt.Errorf("event kind %d not supported in Zapstore", event.Kind)
 	}
