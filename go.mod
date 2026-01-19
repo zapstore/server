@@ -4,6 +4,7 @@ go 1.24.1
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.51.8
 	github.com/pippellia-btc/rely v1.2.2
