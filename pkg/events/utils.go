@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/zapstore/server/pkg/events/legacy"
@@ -19,11 +20,25 @@ func IsZapstoreEvent(e *nostr.Event) bool {
 func ValidateZapstore(event *nostr.Event) error {
 	switch event.Kind {
 	case KindApp:
+		a, ok := Find(event.Tags, "a")
+		if ok && strings.HasPrefix(a, "30063:") {
+			return legacy.ValidateApp(event)
+		}
 		return ValidateApp(event)
+
 	case KindRelease:
+		a, ok := Find(event.Tags, "a")
+		if ok && strings.HasPrefix(a, "32267:") {
+			return legacy.ValidateRelease(event)
+		}
 		return ValidateRelease(event)
+
 	case KindAsset:
 		return ValidateAsset(event)
+
+	case legacy.KindFile:
+		return legacy.ValidateFile(event)
+
 	default:
 		return fmt.Errorf("event kind %d not supported in Zapstore", event.Kind)
 	}
@@ -39,4 +54,14 @@ func ValidateHash(hash string) error {
 		return fmt.Errorf("invalid sha256 hex: %w", err)
 	}
 	return nil
+}
+
+// Find the value of the first tag with the given key.
+func Find(tags nostr.Tags, key string) (string, bool) {
+	for _, tag := range tags {
+		if len(tag) > 1 && tag[0] == key {
+			return tag[1], true
+		}
+	}
+	return "", false
 }

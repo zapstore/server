@@ -57,11 +57,9 @@ func (a *Asset) Validate() error {
 		}
 	}
 
-	// Validate SHA-256 hash format
 	if err := ValidateHash(a.Hash); err != nil {
 		return fmt.Errorf("invalid SHA-256 hash in 'x' tag: %w", err)
 	}
-
 	return nil
 }
 
