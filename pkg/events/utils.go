@@ -9,15 +9,17 @@ import (
 	"github.com/zapstore/server/pkg/events/legacy"
 )
 
+// WithValidation is a list of event kinds that have validation functions.
+var WithValidation = []int{KindApp, KindRelease, KindAsset, KindAppSet, legacy.KindFile}
+
 // IsZapstoreEvent returns true if the event is a supported Zapstore event type.
 func IsZapstoreEvent(e *nostr.Event) bool {
 	return e.Kind == KindApp || e.Kind == KindRelease || e.Kind == KindAsset || legacy.IsZapstoreEvent(e)
 }
 
-// ValidateZapstore validates a Zapstore event by routing to the appropriate
-// validation function based on the event kind. Returns an error if the event
-// kind is not a supported Zapstore event type.
-func ValidateZapstore(event *nostr.Event) error {
+// Validate validates an event by routing to the appropriate
+// validation function based on the event kind.
+func Validate(event *nostr.Event) error {
 	switch event.Kind {
 	case KindApp:
 		a, ok := Find(event.Tags, "a")
@@ -43,7 +45,7 @@ func ValidateZapstore(event *nostr.Event) error {
 		return ValidateAppSet(event)
 
 	default:
-		return fmt.Errorf("event kind %d not supported in Zapstore", event.Kind)
+		return nil
 	}
 }
 
