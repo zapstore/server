@@ -14,10 +14,12 @@ import (
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/zapstore/server/pkg/relay"
+	"github.com/zapstore/server/pkg/vertex"
 )
 
 type Config struct {
-	Relay relay.Config
+	Relay  relay.Config
+	Vertex vertex.Config
 }
 
 // Load creates a new [Config] with default parameters, that get overwritten by env variables when specified.
@@ -36,7 +38,8 @@ func Load() (Config, error) {
 
 func New() Config {
 	return Config{
-		Relay: relay.NewConfig(),
+		Relay:  relay.NewConfig(),
+		Vertex: vertex.NewConfig(),
 	}
 }
 
@@ -44,9 +47,13 @@ func (c Config) Validate() error {
 	if err := c.Relay.Validate(); err != nil {
 		return err
 	}
+	if err := c.Vertex.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (c Config) Print() {
 	fmt.Println(c.Relay)
+	fmt.Println(c.Vertex)
 }

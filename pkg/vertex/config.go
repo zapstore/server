@@ -119,6 +119,6 @@ func (c Config) String() string {
 		"\tAlgorithm:\n"+
 		"\t\tSource: %s\n"+
 		"\t\tSort: %s\n"+
-		"\t\tThreshold: %f\n"+
+		"\t\tThreshold: %f\n",
 		c.SecretKey, c.Timeout, c.CacheExpiration, c.CacheSize, c.Algorithm.Source, c.Algorithm.Sort, c.Algorithm.Threshold)
 }
