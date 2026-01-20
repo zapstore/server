@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/nbd-wtf/go-nostr"
@@ -12,17 +11,17 @@ import (
 
 const Relay = "wss://relay.vertexlab.io"
 
-// Checker is responsible for checking the reputation of a pubkey using the Vertex DVM.
+// Filter is responsible for allowing based on the reputation of a pubkey.
 // It stores ranks in a LRU cache with size and time to live specified in the config.
-type Checker struct {
+type Filter struct {
 	relay  *nostr.Relay
 	cache  *expirable.LRU[string, float64]
 	config Config
 }
 
-// NewChecker creates a new Checker with the given config.
+// NewFilter creates a new Filter with the given config.
 // It returns an error if the connection to the relay fails.
-func NewChecker(c Config) (Checker, error) {
+func NewFilter(c Config) (Filter, error) {
 	relay := nostr.NewRelay(context.Background(), Relay)
 
 	// context only for the connection phase
@@ -30,30 +29,39 @@ func NewChecker(c Config) (Checker, error) {
 	defer cancel()
 
 	if err := relay.Connect(ctx); err != nil {
-		return Checker{}, err
+		return Filter{}, err
 	}
 
-	return Checker{
+	return Filter{
 		relay:  relay,
 		cache:  expirable.NewLRU[string, float64](c.CacheSize, nil, c.CacheExpiration),
 		config: c,
 	}, nil
 }
 
-type PubkeyRank struct {
-	Pubkey string  `json:"pubkey"`
-	Rank   float64 `json:"rank"`
+type Response struct {
+	Pubkey    string  `json:"pubkey"`
+	Rank      float64 `json:"rank"`
+	Follows   int     `json:"follows"`
+	Followers int     `json:"followers"`
 }
 
-// Check returns whether the pubkey is above the threshold.
+// Reject returns whether the pubkey is below the threshold.
 // It returns an error if the request to the relay fails.
-func (c Checker) Check(ctx context.Context, pubkey string) (bool, error) {
-	if c.config.Threshold == 0 {
+func (f Filter) Reject(ctx context.Context, pubkey string) (bool, error) {
+	allow, err := f.Allow(ctx, pubkey)
+	return !allow, err
+}
+
+// Allow returns whether the pubkey is above the threshold.
+// It returns an error if the request to the relay fails.
+func (f Filter) Allow(ctx context.Context, pubkey string) (bool, error) {
+	if f.config.Algorithm.Threshold == 0 {
 		return true, nil
 	}
 
-	if rank, ok := c.cache.Get(pubkey); ok {
-		return rank >= c.config.Threshold, nil
+	if rank, ok := f.cache.Get(pubkey); ok {
+		return rank >= f.config.Algorithm.Threshold, nil
 	}
 
 	request := nostr.Event{
@@ -61,17 +69,19 @@ func (c Checker) Check(ctx context.Context, pubkey string) (bool, error) {
 		CreatedAt: nostr.Now(),
 		Tags: nostr.Tags{
 			{"param", "target", pubkey},
-			{"param", "limit", "1"},
+			{"param", "limit", "5"},
+			{"param", "sort", string(f.config.Algorithm.Sort)},
+			{"param", "source", f.config.Algorithm.Source},
 		},
 	}
 
-	if err := request.Sign(c.config.SecretKey); err != nil {
-		return false, fmt.Errorf("vertex.Check: failed to sign the request: %w", err)
+	if err := request.Sign(f.config.SecretKey); err != nil {
+		return false, fmt.Errorf("vertex.Filter: failed to sign the request: %w", err)
 	}
 
-	response, err := dvmResponse(ctx, request, c.relay)
+	response, err := dvmResponse(ctx, request, f.relay)
 	if err != nil {
-		return false, fmt.Errorf("vertex.Check: failed to get the reputation of %s: %w", pubkey, err)
+		return false, fmt.Errorf("vertex.Filter: failed to verify the reputation of %s: %w", pubkey, err)
 	}
 
 	switch response.Kind {
@@ -81,26 +91,24 @@ func (c Checker) Check(ctx context.Context, pubkey string) (bool, error) {
 		if len(status) > 2 {
 			msg = status[2]
 		}
-		return false, fmt.Errorf("vertex.Check: received a dvm error: %s", msg)
+		return false, fmt.Errorf("vertex.Filter: received a DVM error: %s", msg)
 
 	case 6312:
-		decoder := json.NewDecoder(strings.NewReader(response.Content))
-		if _, err := decoder.Token(); err != nil {
-			return false, fmt.Errorf("vertex.Check: failed to read opening bracket: %w", err)
+		var ranks []Response
+		if err := json.Unmarshal([]byte(response.Content), &ranks); err != nil {
+			return false, fmt.Errorf("vertex.Filter: failed to unmarshal the response: %w", err)
 		}
 
-		var rank PubkeyRank
-		if decoder.More() {
-			if err := decoder.Decode(&rank); err != nil {
-				return false, fmt.Errorf("vertex.Check: failed to unmarshal the response: %w", err)
-			}
+		if len(ranks) == 0 {
+			return false, fmt.Errorf("vertex.Filter: received an empty response")
 		}
 
-		c.cache.Add(pubkey, rank.Rank)
-		return rank.Rank >= c.config.Threshold, nil
+		target := ranks[0]
+		f.cache.Add(target.Pubkey, target.Rank)
+		return target.Rank >= f.config.Algorithm.Threshold, nil
 
 	default:
-		return false, fmt.Errorf("vertex.Check: received an unexpected response kind: %d", response.Kind)
+		return false, fmt.Errorf("vertex.Filter: received an unexpected response kind: %d", response.Kind)
 	}
 }
 
