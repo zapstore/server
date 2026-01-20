@@ -13,18 +13,20 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
 )
 
 type Config struct {
 	Relay relay.Config
+	Rate  rate.Config
 }
 
 // Load creates a new [Config] with default parameters, that get overwritten by env variables when specified.
+// It returns an error if the config is invalid.
 func Load() (Config, error) {
 	config := New()
-	err := env.Parse(&config)
-	if err != nil {
+	if err := env.Parse(&config); err != nil {
 		return Config{}, fmt.Errorf("failed to parse config: %w", err)
 	}
 
@@ -37,6 +39,7 @@ func Load() (Config, error) {
 func New() Config {
 	return Config{
 		Relay: relay.NewConfig(),
+		Rate:  rate.NewConfig(),
 	}
 }
 
@@ -44,9 +47,13 @@ func (c Config) Validate() error {
 	if err := c.Relay.Validate(); err != nil {
 		return err
 	}
+	if err := c.Rate.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (c Config) Print() {
 	fmt.Println(c.Relay)
+	fmt.Println(c.Rate)
 }

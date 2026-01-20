@@ -6,6 +6,7 @@ import (
 	"os/signal"
 
 	"github.com/zapstore/server/pkg/config"
+	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
 )
 
@@ -17,6 +18,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	limiter := rate.NewLimiter(config.Rate)
+	_ = limiter
 
 	relay, err := relay.Setup(config.Relay)
 	if err != nil {

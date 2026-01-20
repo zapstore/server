@@ -7,6 +7,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.51.8
+	github.com/pippellia-btc/rate v0.1.0
 	github.com/pippellia-btc/rely v1.2.2
 )
 
