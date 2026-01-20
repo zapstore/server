@@ -1,3 +1,5 @@
+// The vertex package exposes a configurable [Filter] struct that allows or rejects a pubkey
+// based on its reputation.
 package vertex
 
 import (

@@ -1,3 +1,5 @@
+// Package events provides functions for validating events structures.
+// It also exposes normalized structures and parsing functions for Zapstore events.
 package events
 
 import (

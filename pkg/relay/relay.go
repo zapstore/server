@@ -1,3 +1,5 @@
+// The relay package is responsible for setting up the relay.
+// It exposes a [Setup] function to create a new relay with the given config.
 package relay
 
 import "github.com/pippellia-btc/rely"
