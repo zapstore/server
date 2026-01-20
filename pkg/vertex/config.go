@@ -61,7 +61,15 @@ func (a Algorithm) Validate() error {
 }
 
 type Config struct {
-	// The sorting algorithm to use.
+	// Whitelist is a list of pubkeys that are considered trusted.
+	// Regardless of its rank, a pubkey in the whitelist is always allowed.
+	Whitelist []string `env:"VERTEX_WHITELIST"`
+
+	// Blacklist is a list of pubkeys that are considered blacklisted.
+	// Regardless of its rank, a pubkey in the blacklist is never allowed.
+	Blacklist []string `env:"VERTEX_BLACKLIST"`
+
+	// The algorithm to use to decide whether to allow a pubkey not in the whitelist or blacklist.
 	Algorithm Algorithm
 
 	// The secret key to use for signing requests to the Vertex DVM.
@@ -87,6 +95,18 @@ func NewConfig() Config {
 }
 
 func (c Config) Validate() error {
+	for _, pubkey := range c.Whitelist {
+		if !nostr.IsValid32ByteHex(pubkey) {
+			return fmt.Errorf("whitelist pubkey %s is not a valid 32 byte hex string", pubkey)
+		}
+	}
+
+	for _, pubkey := range c.Blacklist {
+		if !nostr.IsValid32ByteHex(pubkey) {
+			return fmt.Errorf("blacklist pubkey %s is not a valid 32 byte hex string", pubkey)
+		}
+	}
+
 	if err := c.Algorithm.Validate(); err != nil {
 		return err
 	}
@@ -101,6 +121,7 @@ func (c Config) Validate() error {
 	if c.Timeout < time.Second {
 		return errors.New("timeout must be greater than 1s to function reliably")
 	}
+
 	if c.CacheExpiration < time.Second {
 		return errors.New("cache expiration must be greater than 1 second")
 	}
@@ -112,6 +133,8 @@ func (c Config) Validate() error {
 
 func (c Config) String() string {
 	return fmt.Sprintf("Vertex Config:\n"+
+		"\tWhitelist: %v\n"+
+		"\tBlacklist: %v\n"+
 		"\tSecretKey: %s\n"+
 		"\tTimeout: %v\n"+
 		"\tCacheExpiration: %v\n"+
@@ -120,5 +143,5 @@ func (c Config) String() string {
 		"\t\tSource: %s\n"+
 		"\t\tSort: %s\n"+
 		"\t\tThreshold: %f\n",
-		c.SecretKey, c.Timeout, c.CacheExpiration, c.CacheSize, c.Algorithm.Source, c.Algorithm.Sort, c.Algorithm.Threshold)
+		c.Whitelist, c.Blacklist, c.SecretKey, c.Timeout, c.CacheExpiration, c.CacheSize, c.Algorithm.Source, c.Algorithm.Sort, c.Algorithm.Threshold)
 }
