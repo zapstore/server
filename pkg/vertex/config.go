@@ -132,7 +132,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("Vertex Config:\n"+
+	return fmt.Sprintf("Vertex:\n"+
 		"\tWhitelist: %v\n"+
 		"\tBlacklist: %v\n"+
 		"\tSecretKey: %s\n"+

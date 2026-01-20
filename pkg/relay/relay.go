@@ -15,7 +15,7 @@ const (
 func Setup(c Config) (*rely.Relay, error) {
 	relay := rely.NewRelay(
 		rely.WithDomain(c.Domain),
-		rely.WithInfo(c.NIP11()),
+		rely.WithInfo(c.Info.NIP11()),
 	)
 	return relay, nil
 }
