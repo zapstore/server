@@ -6,9 +6,10 @@ require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joho/godotenv v1.5.1
-	github.com/nbd-wtf/go-nostr v0.51.8
+	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/pippellia-btc/rate v0.1.0
 	github.com/pippellia-btc/rely v1.2.2
+	github.com/vertex-lab/nostr-sqlite v0.3.7
 )
 
 require (
@@ -27,6 +28,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pippellia-btc/smallset v0.4.2 // indirect
