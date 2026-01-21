@@ -4,15 +4,10 @@
 package rate
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/pippellia-btc/rate"
-)
-
-var (
-	ErrRateLimited = errors.New("rate-limited: slow down there chief")
 )
 
 type Config struct {
@@ -72,7 +67,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("Rate:\n"+
+	return fmt.Sprintf("Rate Limiter:\n"+
 		"\tInitialTokens: %d\n"+
 		"\tMaxTokens: %d\n"+
 		"\tTokensPerInterval: %d\n"+

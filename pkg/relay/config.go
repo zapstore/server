@@ -4,12 +4,29 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/vertex"
 )
+
+type PubkeyPolicy string
+
+const (
+	// PubkeyPolicyAllow allows unknown pubkeys to publish to the relay.
+	PubkeyPolicyAllow PubkeyPolicy = "ALLOW"
+
+	// PubkeyPolicyBlock blocks unknown pubkeys from publishing to the relay.
+	PubkeyPolicyBlock PubkeyPolicy = "BLOCK"
+
+	// PubkeyPolicyVertex uses the Vertex DVM to determine whether to allow or block unknown pubkeys.
+	// It uses the Vertex configuration to determine the threshold and algorithm to use.
+	PubkeyPolicyVertex PubkeyPolicy = "VERTEX"
+)
+
+var PubkeyPolicies = []PubkeyPolicy{PubkeyPolicyAllow, PubkeyPolicyBlock, PubkeyPolicyVertex}
 
 type Config struct {
 	// Domain is the domain of the relay, used to validate NIP42 authentication.
@@ -19,20 +36,6 @@ type Config struct {
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
 
-	Info   Info
-	Filter FilterConfig
-}
-
-// NewConfig create a new config with default values.
-func NewConfig() Config {
-	return Config{
-		Port:   "3334",
-		Filter: NewFilterConfig(),
-	}
-}
-
-// FilterConfig stores the configuration for the [Filter].
-type FilterConfig struct {
 	// AllowedKinds is a list of event kinds that are allowed to be published to the relay.
 	// Default is all kinds.
 	AllowedKinds []int `env:"RELAY_ALLOWED_EVENT_KINDS"`
@@ -41,31 +44,34 @@ type FilterConfig struct {
 	// Default is empty.
 	BlockedIDs []string `env:"RELAY_BLOCKED_EVENT_IDS"`
 
+	// MaxFilters is the maximum number of filters that can be applied to a connection.
+	// Default is 50.
+	MaxFilters int `env:"RELAY_MAX_REQ_FILTERS"`
+
+	// Allowlist is a list of pubkeys that are considered trusted and can publish to the relay.
+	Allowlist []string `env:"RELAY_PUBKEY_ALLOWLIST"`
+
+	// Blocklist is a list of pubkeys that are considered distrusted and cannot publish to the relay.
+	Blocklist []string `env:"RELAY_PUBKEY_BLOCKLIST"`
+
+	// UnknownPubkeyPolicy is the policy to apply to unknown pubkeys,
+	// which are the ones not in the allowlist or blocklist.
+	// Possible values are "allow", "block", "vertex". Default is "vertex".
+	UnknownPubkeyPolicy PubkeyPolicy `env:"RELAY_PUBKEY_UNKNOWN_POLICY"`
+
+	Info   Info
 	Vertex vertex.Config
 }
 
-func NewFilterConfig() FilterConfig {
-	return FilterConfig{
-		AllowedKinds: events.WithValidation,
-		Vertex:       vertex.NewConfig(),
+// NewConfig create a new config with default values.
+func NewConfig() Config {
+	return Config{
+		Port:                "3334",
+		AllowedKinds:        events.WithValidation,
+		MaxFilters:          50,
+		UnknownPubkeyPolicy: PubkeyPolicyVertex,
+		Vertex:              vertex.NewConfig(),
 	}
-}
-
-func (c FilterConfig) Validate() error {
-	if len(c.AllowedKinds) == 0 {
-		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
-	}
-
-	for _, id := range c.BlockedIDs {
-		if err := events.ValidateHash(id); err != nil {
-			return fmt.Errorf("invalid blocked event ID: %w", err)
-		}
-	}
-
-	if err := c.Vertex.Validate(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Info stores information about the relay, used in the NIP11 relay information document.
@@ -87,42 +93,67 @@ func (c Config) Validate() error {
 	if c.Port == "" {
 		return errors.New("port is not set")
 	}
-	if err := c.Info.Validate(); err != nil {
+	if len(c.AllowedKinds) == 0 {
+		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
+	}
+
+	for _, id := range c.BlockedIDs {
+		if err := events.ValidateHash(id); err != nil {
+			return fmt.Errorf("invalid blocked event ID: %w", err)
+		}
+	}
+	for i, pubkey := range c.Blocklist {
+		if !nostr.IsValid32ByteHex(pubkey) {
+			return fmt.Errorf("invalid blacklisted pubkey at index %d: %s", i, pubkey)
+		}
+	}
+	for i, pubkey := range c.Allowlist {
+		if !nostr.IsValid32ByteHex(pubkey) {
+			return fmt.Errorf("invalid whitelisted pubkey at index %d: %s", i, pubkey)
+		}
+	}
+	if !slices.Contains(PubkeyPolicies, c.UnknownPubkeyPolicy) {
+		return fmt.Errorf("unknown pubkey policy: %s. Possible values are: %v", c.UnknownPubkeyPolicy, PubkeyPolicies)
+	}
+
+	if err := c.Vertex.Validate(); err != nil {
 		return err
 	}
-	if err := c.Filter.Validate(); err != nil {
-		return err
+
+	if err := c.Info.Validate(); err != nil {
+		// info is not critical, so we log the error and continue
+		slog.Error("relay info is invalid or incomplete", "error", err)
 	}
 	return nil
 }
 
 func (i Info) Validate() error {
 	if i.Name == "" {
-		slog.Warn("relay name is not set")
+		return errors.New("relay name is not set")
 	}
 	if i.Pubkey == "" {
-		slog.Warn("relay pubkey is not set")
+		return errors.New("relay pubkey is not set")
 	}
 	if !nostr.IsValid32ByteHex(i.Pubkey) {
-		slog.Warn("relay pubkey is not a valid 32 byte hex string")
+		return errors.New("relay pubkey is not a valid 32 byte hex string")
 	}
 	if i.Description == "" {
-		slog.Warn("relay description is not set")
+		return errors.New("relay description is not set")
 	}
 	if i.URL == "" {
-		slog.Warn("relay URL is not set")
+		return errors.New("relay URL is not set")
 	}
 	if i.Contact == "" {
-		slog.Warn("relay contact is not set")
+		return errors.New("relay contact is not set")
 	}
 	if i.Icon == "" {
-		slog.Warn("relay icon is not set")
+		return errors.New("relay icon is not set")
 	}
 	if i.Banner == "" {
-		slog.Warn("relay banner is not set")
+		return errors.New("relay banner is not set")
 	}
 	if i.Software == "" {
-		slog.Warn("relay software is not set")
+		return errors.New("relay software is not set")
 	}
 	return nil
 }
@@ -153,19 +184,18 @@ func (i Info) String() string {
 		i.Name, i.Pubkey, i.Description, i.URL, i.Contact, i.Icon, i.Banner, i.Software)
 }
 
-func (c FilterConfig) String() string {
-	return fmt.Sprintf("Filter:\n"+
-		"\tAllowed Kinds: %v\n"+
-		"\tBlocked IDs: %v\n"+
-		c.Vertex.String(), c.AllowedKinds, c.BlockedIDs)
-}
-
 func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
+		"\tAllowed Kinds: %v\n"+
+		"\tBlocked IDs: %v\n"+
+		"\tAllowlist: %v\n"+
+		"\tBlocklist: %v\n"+
+		"\tUnknown Pubkey Policy: %s\n"+
+		"\tMax Filters: %d\n"+
 		c.Info.String()+
-		c.Filter.String(),
-		c.Domain, c.Port,
+		c.Vertex.String(),
+		c.Domain, c.Port, c.AllowedKinds, c.BlockedIDs, c.Allowlist, c.Blocklist, c.UnknownPubkeyPolicy, c.MaxFilters,
 	)
 }

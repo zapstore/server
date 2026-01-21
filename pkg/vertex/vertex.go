@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
+	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/nbd-wtf/go-nostr"
@@ -28,7 +28,7 @@ func NewFilter(c Config) (Filter, error) {
 	relay := nostr.NewRelay(context.Background(), Relay)
 
 	// context only for the connection phase
-	ctx, cancel := context.WithTimeout(context.Background(), c.Timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := relay.Connect(ctx); err != nil {
@@ -59,14 +59,6 @@ func (f Filter) Reject(ctx context.Context, pubkey string) (bool, error) {
 // Allow returns whether the pubkey is above the threshold.
 // It returns an error if the request to the relay fails.
 func (f Filter) Allow(ctx context.Context, pubkey string) (bool, error) {
-	if slices.Contains(f.config.Blacklist, pubkey) {
-		return false, nil
-	}
-
-	if slices.Contains(f.config.Whitelist, pubkey) {
-		return true, nil
-	}
-
 	if f.config.Algorithm.Threshold == 0 {
 		return true, nil
 	}
