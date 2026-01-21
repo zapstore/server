@@ -14,6 +14,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pippellia-btc/rate"
 	"github.com/pippellia-btc/rely"
+	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/vertex"
 )
 
@@ -56,6 +57,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 		IDIsBlocked(config.BlockedIDs),
 		rely.InvalidID,
 		rely.InvalidSignature,
+		InvalidStructure(),
 		AuthorNotTrusted(config, vertexFilter),
 	)
 
@@ -129,6 +131,12 @@ func IDIsBlocked(ids []string) func(_ rely.Client, e *nostr.Event) error {
 			return fmt.Errorf("%w: %v", ErrEventIDBlocked, ids)
 		}
 		return nil
+	}
+}
+
+func InvalidStructure() func(_ rely.Client, e *nostr.Event) error {
+	return func(_ rely.Client, e *nostr.Event) error {
+		return events.Validate(e)
 	}
 }
 
