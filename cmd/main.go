@@ -20,14 +20,13 @@ func main() {
 	}
 
 	limiter := rate.NewLimiter(config.Rate)
-	_ = limiter
 
-	relay, err := relay.Setup(config.Relay)
+	relay, err := relay.Setup(config.Relay, limiter)
 	if err != nil {
 		panic(err)
 	}
 
-	if err := relay.StartAndServe(ctx, "localhost:3334"); err != nil {
+	if err := relay.StartAndServe(ctx, config.Relay.Port); err != nil {
 		panic(err)
 	}
 }

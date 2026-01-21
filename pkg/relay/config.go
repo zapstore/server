@@ -7,6 +7,7 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
+	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/vertex"
 )
 
@@ -19,7 +20,52 @@ type Config struct {
 	Port string `env:"RELAY_PORT"`
 
 	Info   Info
+	Filter FilterConfig
+}
+
+// NewConfig create a new config with default values.
+func NewConfig() Config {
+	return Config{
+		Port:   "3334",
+		Filter: NewFilterConfig(),
+	}
+}
+
+// FilterConfig stores the configuration for the [Filter].
+type FilterConfig struct {
+	// AllowedKinds is a list of event kinds that are allowed to be published to the relay.
+	// Default is all kinds.
+	AllowedKinds []int `env:"RELAY_ALLOWED_EVENT_KINDS"`
+
+	// BlockedIDs is a list of event IDs that are blocked from being published to the relay.
+	// Default is empty.
+	BlockedIDs []string `env:"RELAY_BLOCKED_EVENT_IDS"`
+
 	Vertex vertex.Config
+}
+
+func NewFilterConfig() FilterConfig {
+	return FilterConfig{
+		AllowedKinds: events.WithValidation,
+		Vertex:       vertex.NewConfig(),
+	}
+}
+
+func (c FilterConfig) Validate() error {
+	if len(c.AllowedKinds) == 0 {
+		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
+	}
+
+	for _, id := range c.BlockedIDs {
+		if err := events.ValidateHash(id); err != nil {
+			return fmt.Errorf("invalid blocked event ID: %w", err)
+		}
+	}
+
+	if err := c.Vertex.Validate(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Info stores information about the relay, used in the NIP11 relay information document.
@@ -34,14 +80,6 @@ type Info struct {
 	Software    string `env:"RELAY_SOFTWARE"`
 }
 
-// NewConfig create a new config with default values.
-func NewConfig() Config {
-	return Config{
-		Port:   "3334",
-		Vertex: vertex.NewConfig(),
-	}
-}
-
 func (c Config) Validate() error {
 	if c.Domain == "" {
 		return errors.New("domain is not set")
@@ -52,7 +90,7 @@ func (c Config) Validate() error {
 	if err := c.Info.Validate(); err != nil {
 		return err
 	}
-	if err := c.Vertex.Validate(); err != nil {
+	if err := c.Filter.Validate(); err != nil {
 		return err
 	}
 	return nil
@@ -115,12 +153,19 @@ func (i Info) String() string {
 		i.Name, i.Pubkey, i.Description, i.URL, i.Contact, i.Icon, i.Banner, i.Software)
 }
 
+func (c FilterConfig) String() string {
+	return fmt.Sprintf("Filter:\n"+
+		"\tAllowed Kinds: %v\n"+
+		"\tBlocked IDs: %v\n"+
+		c.Vertex.String(), c.AllowedKinds, c.BlockedIDs)
+}
+
 func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
 		c.Info.String()+
-		c.Vertex.String(),
+		c.Filter.String(),
 		c.Domain, c.Port,
 	)
 }

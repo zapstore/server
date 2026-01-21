@@ -4,10 +4,15 @@
 package rate
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/pippellia-btc/rate"
+)
+
+var (
+	ErrRateLimited = errors.New("rate-limited: slow down there chief")
 )
 
 type Config struct {
@@ -33,6 +38,7 @@ func NewConfig() Config {
 	}
 }
 
+// NewLimiter creates a new rate limiter with a [rate.FlatRefiller] from the given config.
 func NewLimiter(c Config) *rate.Limiter[string] {
 	refiller := rate.FlatRefiller[string]{
 		InitialTokens:     float64(c.InitialTokens),
