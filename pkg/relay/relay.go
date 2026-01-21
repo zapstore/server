@@ -40,6 +40,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 	relay := rely.NewRelay(
 		rely.WithDomain(config.Domain),
 		rely.WithInfo(config.Info.NIP11()),
+		rely.WithMaxMessageSize(config.MaxMessageBytes),
 	)
 
 	relay.Reject.Connection.Clear()

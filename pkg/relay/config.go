@@ -36,6 +36,14 @@ type Config struct {
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
 
+	// MaxMessageBytes is the maximum size of a message that can be sent to the relay.
+	// Default is 500_000 (0.5MB).
+	MaxMessageBytes int64 `env:"RELAY_MAX_MESSAGE_BYTES"`
+
+	// MaxFilters is the maximum number of filters that can be applied to a connection.
+	// Default is 50.
+	MaxFilters int `env:"RELAY_MAX_REQ_FILTERS"`
+
 	// AllowedKinds is a list of event kinds that are allowed to be published to the relay.
 	// Default is all kinds.
 	AllowedKinds []int `env:"RELAY_ALLOWED_EVENT_KINDS"`
@@ -43,10 +51,6 @@ type Config struct {
 	// BlockedIDs is a list of event IDs that are blocked from being published to the relay.
 	// Default is empty.
 	BlockedIDs []string `env:"RELAY_BLOCKED_EVENT_IDS"`
-
-	// MaxFilters is the maximum number of filters that can be applied to a connection.
-	// Default is 50.
-	MaxFilters int `env:"RELAY_MAX_REQ_FILTERS"`
 
 	// Allowlist is a list of pubkeys that are considered trusted and can publish to the relay.
 	Allowlist []string `env:"RELAY_PUBKEY_ALLOWLIST"`
@@ -59,16 +63,18 @@ type Config struct {
 	// Possible values are "allow", "block", "vertex". Default is "vertex".
 	UnknownPubkeyPolicy PubkeyPolicy `env:"RELAY_PUBKEY_UNKNOWN_POLICY"`
 
-	Info   Info
 	Vertex vertex.Config
+
+	Info Info
 }
 
 // NewConfig create a new config with default values.
 func NewConfig() Config {
 	return Config{
 		Port:                "3334",
-		AllowedKinds:        events.WithValidation,
+		MaxMessageBytes:     500_000,
 		MaxFilters:          50,
+		AllowedKinds:        events.WithValidation,
 		UnknownPubkeyPolicy: PubkeyPolicyVertex,
 		Vertex:              vertex.NewConfig(),
 	}
@@ -93,6 +99,13 @@ func (c Config) Validate() error {
 	if c.Port == "" {
 		return errors.New("port is not set")
 	}
+	if c.MaxMessageBytes <= 0 {
+		return errors.New("max message bytes must be greater than 0")
+	}
+	if c.MaxFilters <= 0 {
+		return errors.New("max filters must be greater than 0")
+	}
+
 	if len(c.AllowedKinds) == 0 {
 		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
 	}
@@ -188,14 +201,15 @@ func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
+		"\tMax Message Bytes: %d\n"+
+		"\tMax Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		"\tBlocked IDs: %v\n"+
 		"\tAllowlist: %v\n"+
 		"\tBlocklist: %v\n"+
 		"\tUnknown Pubkey Policy: %s\n"+
-		"\tMax Filters: %d\n"+
 		c.Info.String()+
 		c.Vertex.String(),
-		c.Domain, c.Port, c.AllowedKinds, c.BlockedIDs, c.Allowlist, c.Blocklist, c.UnknownPubkeyPolicy, c.MaxFilters,
+		c.Domain, c.Port, c.MaxMessageBytes, c.MaxFilters, c.AllowedKinds, c.BlockedIDs, c.Allowlist, c.Blocklist, c.UnknownPubkeyPolicy,
 	)
 }
