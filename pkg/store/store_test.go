@@ -15,40 +15,102 @@ import (
 var ctx = context.Background()
 
 func TestAppSearchQuery(t *testing.T) {
+	since := nostr.Timestamp(1700000000)
+	until := nostr.Timestamp(1800000000)
+
 	tests := []struct {
 		name   string
 		filter nostr.Filter
 		want   sqlite.Query
 	}{
 		{
-			name: "basic search without limit",
+			name: "basic search",
 			filter: nostr.Filter{
 				Kinds:  []int{events.KindApp},
 				Search: "signal",
+				Limit:  50,
 			},
 			want: sqlite.Query{
 				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
 		FROM events e
-		INNER JOIN apps_fts fts ON e.id = fts.id
+		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ?
-		ORDER BY rank`,
-				Args: []any{"signal"},
+		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", 50},
 			},
 		},
 		{
-			name: "search with limit",
+			name: "search with IDs",
 			filter: nostr.Filter{
 				Kinds:  []int{events.KindApp},
-				Search: "messenger",
+				Search: "signal",
+				IDs:    []string{"abc123", "def456"},
 				Limit:  10,
 			},
 			want: sqlite.Query{
 				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
 		FROM events e
-		INNER JOIN apps_fts fts ON e.id = fts.id
-		WHERE apps_fts MATCH ?
-		ORDER BY rank LIMIT ?`,
-				Args: []any{"messenger", 10},
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ? AND e.id IN (?,?)
+		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", "abc123", "def456", 10},
+			},
+		},
+		{
+			name: "search with authors",
+			filter: nostr.Filter{
+				Kinds:   []int{events.KindApp},
+				Search:  "signal",
+				Authors: []string{"pubkey1", "pubkey2"},
+				Limit:   20,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ? AND e.pubkey IN (?,?)
+		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", "pubkey1", "pubkey2", 20},
+			},
+		},
+		{
+			name: "search with since and until",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "signal",
+				Since:  &since,
+				Until:  &until,
+				Limit:  100,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ? AND e.created_at >= ? AND e.created_at <= ?
+		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", int64(1700000000), int64(1800000000), 100},
+			},
+		},
+		{
+			name: "search with tags",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "signal",
+				Tags:   nostr.TagMap{"t": {"productivity", "tools"}},
+				Limit:  25,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ? AND EXISTS (SELECT 1 FROM tags WHERE event_id = e.id AND key = ? AND value IN (?,?))
+		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", "t", "productivity", "tools", 25},
 			},
 		},
 	}
@@ -68,7 +130,7 @@ func TestAppSearchQuery(t *testing.T) {
 				t.Errorf("SQL mismatch\ngot:  %q\nwant: %q", got[0].SQL, tt.want.SQL)
 			}
 
-			if !slices.Equal(got[0].Args, tt.want.Args) {
+			if !reflect.DeepEqual(got[0].Args, tt.want.Args) {
 				t.Errorf("Args mismatch\ngot:  %v\nwant: %v", got[0].Args, tt.want.Args)
 			}
 		})
@@ -90,7 +152,7 @@ func TestStoreQueryAppSearch(t *testing.T) {
 			CreatedAt: nostr.Timestamp(1700000001),
 			Kind:      events.KindApp,
 			Tags: nostr.Tags{
-				{"d", "org.thoughtcrime.securesms"},
+				{"d", "org.signal.app"},
 				{"name", "Signal"},
 				{"summary", "Private messenger"},
 				{"f", "android-arm64-v8a"},
@@ -126,6 +188,20 @@ func TestStoreQueryAppSearch(t *testing.T) {
 			Content: "WhatsApp is a popular messaging application.",
 			Sig:     "sig3",
 		},
+		{
+			ID:        "app4",
+			PubKey:    "pubkey4",
+			CreatedAt: nostr.Timestamp(1700000004),
+			Kind:      events.KindApp,
+			Tags: nostr.Tags{
+				{"d", "com.signal.signaling"},
+				{"name", "Signal Signaling"},
+				{"summary", "Signal Signaling is the signaling protocol for Signal."},
+				{"f", "android-x86"}, // different platform, so it should not be returned
+			},
+			Content: "Signal Signaling is the signaling protocol for Signal.",
+			Sig:     "sig4",
+		},
 	}
 
 	for _, app := range apps {
@@ -138,6 +214,8 @@ func TestStoreQueryAppSearch(t *testing.T) {
 	filter := nostr.Filter{
 		Kinds:  []int{events.KindApp},
 		Search: "signal",
+		Tags:   nostr.TagMap{"f": {"android-arm64-v8a"}},
+		Limit:  50,
 	}
 
 	results, err := store.Query(ctx, filter)
