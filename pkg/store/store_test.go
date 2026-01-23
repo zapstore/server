@@ -1,4 +1,4 @@
-package sqlite
+package store
 
 import (
 	"cmp"
@@ -8,7 +8,69 @@ import (
 
 	"github.com/nbd-wtf/go-nostr"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
+	"github.com/zapstore/server/pkg/events"
 )
+
+func TestAppSearchQuery(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter nostr.Filter
+		want   sqlite.Query
+	}{
+		{
+			name: "basic search without limit",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "signal",
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		INNER JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ?
+		ORDER BY rank`,
+				Args: []any{"signal"},
+			},
+		},
+		{
+			name: "search with limit",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "messenger",
+				Limit:  10,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		INNER JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ?
+		ORDER BY rank LIMIT ?`,
+				Args: []any{"messenger", 10},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := appSearchQuery(tt.filter)
+			if err != nil {
+				t.Fatalf("appSearchQuery() error = %v", err)
+			}
+
+			if len(got) != 1 {
+				t.Fatalf("appSearchQuery() returned %d queries, want 1", len(got))
+			}
+
+			if got[0].SQL != tt.want.SQL {
+				t.Errorf("SQL mismatch\ngot:  %q\nwant: %q", got[0].SQL, tt.want.SQL)
+			}
+
+			if !slices.Equal(got[0].Args, tt.want.Args) {
+				t.Errorf("Args mismatch\ngot:  %v\nwant: %v", got[0].Args, tt.want.Args)
+			}
+		})
+	}
+}
 
 // Indexed tag keys per event kind
 var (
@@ -19,7 +81,7 @@ var (
 )
 
 func TestAppTagsIndexing(t *testing.T) {
-	store, err := NewStore(Config{Path: ":memory:"})
+	store, err := New(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -66,7 +128,7 @@ func TestAppTagsIndexing(t *testing.T) {
 }
 
 func TestAppFTSIndexing(t *testing.T) {
-	store, err := NewStore(Config{Path: ":memory:"})
+	store, err := New(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -138,7 +200,7 @@ func TestAppFTSIndexing(t *testing.T) {
 }
 
 func TestReleaseTagsIndexing(t *testing.T) {
-	store, err := NewStore(Config{Path: ":memory:"})
+	store, err := New(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -181,7 +243,7 @@ func TestReleaseTagsIndexing(t *testing.T) {
 }
 
 func TestAssetTagsIndexing(t *testing.T) {
-	store, err := NewStore(Config{Path: ":memory:"})
+	store, err := New(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -227,7 +289,7 @@ func TestAssetTagsIndexing(t *testing.T) {
 }
 
 func TestFileTagsIndexing(t *testing.T) {
-	store, err := NewStore(Config{Path: ":memory:"})
+	store, err := New(Config{Path: ":memory:"})
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
