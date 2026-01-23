@@ -45,10 +45,10 @@ func New() Config {
 
 func (c Config) Validate() error {
 	if err := c.Relay.Validate(); err != nil {
-		return err
+		return fmt.Errorf("relay: %w", err)
 	}
 	if err := c.Rate.Validate(); err != nil {
-		return err
+		return fmt.Errorf("rate: %w", err)
 	}
 	return nil
 }

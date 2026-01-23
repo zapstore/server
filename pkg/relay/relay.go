@@ -14,7 +14,9 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pippellia-btc/rate"
 	"github.com/pippellia-btc/rely"
+	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/events"
+	"github.com/zapstore/server/pkg/store"
 	"github.com/zapstore/server/pkg/vertex"
 )
 
@@ -36,6 +38,11 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vertex filter: %w", err)
 		}
+	}
+
+	store, err := store.New(config.Store)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create store: %w", err)
 	}
 
 	relay := rely.NewRelay(
@@ -67,9 +74,35 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 		FiltersExceed(config.MaxFilters),
 	)
 
-	relay.On.Connect = func(c rely.Client) { c.SendAuth() }
-
+	relay.On.Req = Query(store)
+	relay.On.Event = Save(store)
 	return relay, nil
+}
+
+func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
+	return func(c rely.Client, event *nostr.Event) error {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		switch {
+		case nostr.IsRegularKind(event.Kind):
+			_, err := store.Save(ctx, event)
+			return err
+
+		case nostr.IsReplaceableKind(event.Kind) || nostr.IsAddressableKind(event.Kind):
+			_, err := store.Replace(ctx, event)
+			return err
+
+		default:
+			return nil
+		}
+	}
+}
+
+func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, filters nostr.Filters) ([]nostr.Event, error) {
+	return func(ctx context.Context, c rely.Client, filters nostr.Filters) ([]nostr.Event, error) {
+		return store.Query(ctx, filters...)
+	}
 }
 
 func RateConnectionIP(limiter *rate.Limiter[string]) func(_ rely.Stats, request *http.Request) error {

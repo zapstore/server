@@ -9,6 +9,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/zapstore/server/pkg/events"
+	"github.com/zapstore/server/pkg/store"
 	"github.com/zapstore/server/pkg/vertex"
 )
 
@@ -64,6 +65,8 @@ type Config struct {
 	UnknownPubkeyPolicy PubkeyPolicy `env:"RELAY_PUBKEY_UNKNOWN_POLICY"`
 
 	Vertex vertex.Config
+
+	Store store.Config
 
 	Info Info
 }
@@ -130,7 +133,11 @@ func (c Config) Validate() error {
 	}
 
 	if err := c.Vertex.Validate(); err != nil {
-		return err
+		return fmt.Errorf("vertex: %w", err)
+	}
+
+	if err := c.Store.Validate(); err != nil {
+		return fmt.Errorf("store: %w", err)
 	}
 
 	if err := c.Info.Validate(); err != nil {
@@ -209,7 +216,8 @@ func (c Config) String() string {
 		"\tBlocklist: %v\n"+
 		"\tUnknown Pubkey Policy: %s\n"+
 		c.Info.String()+
-		c.Vertex.String(),
+		c.Vertex.String()+
+		c.Store.String(),
 		c.Domain, c.Port, c.MaxMessageBytes, c.MaxFilters, c.AllowedKinds, c.BlockedIDs, c.Allowlist, c.Blocklist, c.UnknownPubkeyPolicy,
 	)
 }
