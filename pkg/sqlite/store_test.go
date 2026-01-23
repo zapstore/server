@@ -10,6 +10,14 @@ import (
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 )
 
+// Indexed tag keys per event kind
+var (
+	appIndexedKeys     = []string{"d", "name", "t", "f", "license", "url", "repository", "a"}
+	releaseIndexedKeys = []string{"d", "i", "version", "c", "e", "a", "commit"}
+	assetIndexedKeys   = []string{"i", "x", "f", "m", "url", "version", "apk_certificate_hash"}
+	fileIndexedKeys    = []string{"x", "f", "m", "url", "fallback", "version", "apk_signature_hash"}
+)
+
 func TestAppTagsIndexing(t *testing.T) {
 	store, err := NewStore(Config{Path: ":memory:"})
 	if err != nil {
@@ -28,17 +36,14 @@ func TestAppTagsIndexing(t *testing.T) {
 			{"name", "Example App"},
 			{"f", "android-arm64-v8a"},
 			{"f", "linux-x86_64"},
-			{"summary", "A short description"},
-			{"icon", "https://example.com/icon.png"},
-			{"image", "https://example.com/screenshot1.png"},
-			{"image", "https://example.com/screenshot2.png"},
+			{"summary", "A short description"},               // FTS only, not in tags
+			{"icon", "https://example.com/icon.png"},         // Not indexed
+			{"image", "https://example.com/screenshot1.png"}, // Not indexed
 			{"t", "productivity"},
 			{"t", "tools"},
 			{"url", "https://example.com"},
 			{"repository", "https://github.com/example/app"},
 			{"license", "MIT"},
-			// Tags that should NOT be indexed
-			{"unrelated", "should-not-index"},
 		},
 		Content: "Full app description",
 		Sig:     "sig123",
@@ -53,10 +58,82 @@ func TestAppTagsIndexing(t *testing.T) {
 	}
 
 	got := getIndexedTags(t, store, event.ID)
-	want := expectedTags(event)
+	want := expectedTags(event, appIndexedKeys)
 
 	if !equalTags(got, want) {
 		t.Errorf("indexed tags mismatch\ngot:  %v\nwant: %v", got, want)
+	}
+}
+
+func TestAppFTSIndexing(t *testing.T) {
+	store, err := NewStore(Config{Path: ":memory:"})
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+
+	event := &nostr.Event{
+		ID:        "app123",
+		PubKey:    "pubkey123",
+		CreatedAt: nostr.Timestamp(1700000000),
+		Kind:      32267,
+		Tags: nostr.Tags{
+			{"d", "com.example.app"},
+			{"name", "Signal Messenger"},
+			{"summary", "Private messaging app"},
+			{"f", "android-arm64-v8a"},
+		},
+		Content: "Signal is a privacy-focused messaging application with end-to-end encryption.",
+		Sig:     "sig123",
+	}
+
+	if _, err := store.Save(ctx, event); err != nil {
+		t.Fatalf("failed to save event: %v", err)
+	}
+
+	// Verify FTS entry exists
+	var eventID, name, summary, content string
+	err = store.DB.QueryRowContext(ctx,
+		"SELECT id, name, summary, content FROM apps_fts WHERE id = ?",
+		event.ID,
+	).Scan(&eventID, &name, &summary, &content)
+	if err != nil {
+		t.Fatalf("failed to query apps_fts: %v", err)
+	}
+
+	if eventID != event.ID {
+		t.Errorf("id mismatch: got %q, want %q", eventID, event.ID)
+	}
+	if name != "Signal Messenger" {
+		t.Errorf("name mismatch: got %q, want %q", name, "Signal Messenger")
+	}
+	if summary != "Private messaging app" {
+		t.Errorf("summary mismatch: got %q, want %q", summary, "Private messaging app")
+	}
+	if content != event.Content {
+		t.Errorf("content mismatch: got %q, want %q", content, event.Content)
+	}
+
+	deleted, err := store.Delete(ctx, event.ID)
+	if err != nil {
+		t.Fatalf("failed to delete event: %v", err)
+	}
+	if !deleted {
+		t.Fatal("event was not deleted")
+	}
+
+	// Verify FTS entry is cleaned up
+	var count int
+	err = store.DB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM apps_fts WHERE id = ?",
+		event.ID,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("failed to query apps_fts: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("FTS entry not cleaned up: got %d entries, want 0", count)
 	}
 }
 
@@ -80,8 +157,8 @@ func TestReleaseTagsIndexing(t *testing.T) {
 			{"c", "stable"},
 			{"e", "asset123"},
 			{"e", "asset456"},
-			// Tags that should NOT be indexed
-			{"unrelated", "should-not-index"},
+			{"a", "32267:pubkey123:com.example.app"},
+			{"commit", "abc123def456"},
 		},
 		Content: "Release notes",
 		Sig:     "sig123",
@@ -96,7 +173,7 @@ func TestReleaseTagsIndexing(t *testing.T) {
 	}
 
 	got := getIndexedTags(t, store, event.ID)
-	want := expectedTags(event)
+	want := expectedTags(event, releaseIndexedKeys)
 
 	if !equalTags(got, want) {
 		t.Errorf("indexed tags mismatch\ngot:  %v\nwant: %v", got, want)
@@ -124,23 +201,10 @@ func TestAssetTagsIndexing(t *testing.T) {
 			{"f", "android-armeabi-v7a"},
 			{"url", "https://cdn.example.com/app.apk"},
 			{"m", "application/vnd.android.package-archive"},
-			{"size", "12345678"},
-			{"min_platform_version", "21"},
-			{"target_platform_version", "34"},
-			{"supported_nip", "01"},
-			{"supported_nip", "04"},
-			{"filename", "app-release.apk"},
-			{"variant", ""},
-			{"commit", "abc123"},
-			{"min_allowed_version", "0.9.0"},
-			{"version_code", "100"},
-			{"min_allowed_version_code", "90"},
 			{"apk_certificate_hash", "hash123"},
 			{"apk_certificate_hash", "hash456"},
-			{"executable", "bin/app"},
-			{"executable", "bin/helper"},
-			// Tags that should NOT be indexed
-			{"unrelated", "should-not-index"},
+			{"size", "12345678"},    // Not indexed
+			{"version_code", "100"}, // Not indexed
 		},
 		Content: "",
 		Sig:     "sig123",
@@ -155,7 +219,7 @@ func TestAssetTagsIndexing(t *testing.T) {
 	}
 
 	got := getIndexedTags(t, store, event.ID)
-	want := expectedTags(event)
+	want := expectedTags(event, assetIndexedKeys)
 
 	if !equalTags(got, want) {
 		t.Errorf("indexed tags mismatch\ngot:  %v\nwant: %v", got, want)
@@ -181,14 +245,12 @@ func TestFileTagsIndexing(t *testing.T) {
 			{"fallback", "https://backup.example.com/app.apk"},
 			{"m", "application/vnd.android.package-archive"},
 			{"version", "1.0.0"},
-			{"version_code", "100"},
 			{"f", "android-arm64-v8a"},
 			{"f", "android-armeabi-v7a"},
 			{"apk_signature_hash", "sighash123"},
-			{"min_sdk_version", "21"},
-			{"target_sdk_version", "34"},
-			// Tags that should NOT be indexed
-			{"unrelated", "should-not-index"},
+			{"version_code", "100"},      // Not indexed
+			{"min_sdk_version", "21"},    // Not indexed
+			{"target_sdk_version", "34"}, // Not indexed
 		},
 		Content: "",
 		Sig:     "sig123",
@@ -203,7 +265,7 @@ func TestFileTagsIndexing(t *testing.T) {
 	}
 
 	got := getIndexedTags(t, store, event.ID)
-	want := expectedTags(event)
+	want := expectedTags(event, fileIndexedKeys)
 
 	if !equalTags(got, want) {
 		t.Errorf("indexed tags mismatch\ngot:  %v\nwant: %v", got, want)
@@ -236,21 +298,19 @@ func getIndexedTags(t *testing.T, store *sqlite.Store, eventID string) nostr.Tag
 	return tags
 }
 
-// expectedTags extracts tags from an event, filtering out "unrelated" tags
-// and keeping only the first two elements of each tag.
+// expectedTags extracts tags from an event that match the given indexed keys.
 // Returns tags sorted in lexicographic order by key then value.
-func expectedTags(event *nostr.Event) nostr.Tags {
+func expectedTags(event *nostr.Event, indexedKeys []string) nostr.Tags {
 	var tags nostr.Tags
 	for _, tag := range event.Tags {
 		if len(tag) < 2 {
 			continue
 		}
-		if tag[0] == "unrelated" {
-			continue
-		}
-		tags = append(tags, nostr.Tag{tag[0], tag[1]})
-	}
 
+		if slices.Contains(indexedKeys, tag[0]) {
+			tags = append(tags, nostr.Tag{tag[0], tag[1]})
+		}
+	}
 	sortTags(tags)
 	return tags
 }
