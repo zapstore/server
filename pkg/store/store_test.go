@@ -3,6 +3,7 @@ package store
 import (
 	"cmp"
 	"context"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/events"
 )
+
+var ctx = context.Background()
 
 func TestAppSearchQuery(t *testing.T) {
 	tests := []struct {
@@ -72,6 +75,82 @@ func TestAppSearchQuery(t *testing.T) {
 	}
 }
 
+func TestStoreQueryAppSearch(t *testing.T) {
+	store, err := New(Config{Path: ":memory:"})
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Save multiple apps with varying relevance to "signal"
+	apps := []*nostr.Event{
+		{
+			ID:        "app1",
+			PubKey:    "pubkey1",
+			CreatedAt: nostr.Timestamp(1700000001),
+			Kind:      events.KindApp,
+			Tags: nostr.Tags{
+				{"d", "org.thoughtcrime.securesms"},
+				{"name", "Signal"},
+				{"summary", "Private messenger"},
+				{"f", "android-arm64-v8a"},
+			},
+			Content: "Signal is a privacy-focused messaging app.",
+			Sig:     "sig1",
+		},
+		{
+			ID:        "app2",
+			PubKey:    "pubkey2",
+			CreatedAt: nostr.Timestamp(1700000002),
+			Kind:      events.KindApp,
+			Tags: nostr.Tags{
+				{"d", "org.telegram.messenger"},
+				{"name", "Telegram"},
+				{"summary", "Cloud-based messenger"},
+				{"f", "android-arm64-v8a"},
+			},
+			Content: "Telegram is a cloud-based messaging app. Some say it's an alternative to Signal.",
+			Sig:     "sig2",
+		},
+		{
+			ID:        "app3",
+			PubKey:    "pubkey3",
+			CreatedAt: nostr.Timestamp(1700000003),
+			Kind:      events.KindApp,
+			Tags: nostr.Tags{
+				{"d", "com.whatsapp"},
+				{"name", "WhatsApp"},
+				{"summary", "Popular messenger"},
+				{"f", "android-arm64-v8a"},
+			},
+			Content: "WhatsApp is a popular messaging application.",
+			Sig:     "sig3",
+		},
+	}
+
+	for _, app := range apps {
+		if _, err := store.Save(ctx, app); err != nil {
+			t.Fatalf("failed to save app %s: %v", app.ID, err)
+		}
+	}
+
+	// Query for "signal"
+	filter := nostr.Filter{
+		Kinds:  []int{events.KindApp},
+		Search: "signal",
+	}
+
+	results, err := store.Query(ctx, filter)
+	if err != nil {
+		t.Fatalf("store.Query() error = %v", err)
+	}
+
+	expected := []nostr.Event{*apps[0], *apps[1]}
+	if !reflect.DeepEqual(results, expected) {
+		t.Errorf("results mismatch\ngot:  %v\nwant: %v", results, expected)
+	}
+}
+
 // Indexed tag keys per event kind
 var (
 	appIndexedKeys     = []string{"d", "name", "t", "f", "license", "url", "repository", "a"}
@@ -86,7 +165,6 @@ func TestAppTagsIndexing(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	defer store.Close()
-	ctx := context.Background()
 
 	event := &nostr.Event{
 		ID:        "app123",
@@ -133,7 +211,6 @@ func TestAppFTSIndexing(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	defer store.Close()
-	ctx := context.Background()
 
 	event := &nostr.Event{
 		ID:        "app123",
@@ -205,7 +282,6 @@ func TestReleaseTagsIndexing(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	defer store.Close()
-	ctx := context.Background()
 
 	event := &nostr.Event{
 		ID:        "release123",
@@ -248,7 +324,6 @@ func TestAssetTagsIndexing(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	defer store.Close()
-	ctx := context.Background()
 
 	event := &nostr.Event{
 		ID:        "asset123",
@@ -294,7 +369,6 @@ func TestFileTagsIndexing(t *testing.T) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	defer store.Close()
-	ctx := context.Background()
 
 	event := &nostr.Event{
 		ID:        "file123",
