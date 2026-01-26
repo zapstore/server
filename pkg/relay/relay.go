@@ -72,6 +72,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 	relay.Reject.Req.Append(
 		RateReqIP(limiter),
 		FiltersExceed(config.MaxFilters),
+		VagueFilters(),
 	)
 
 	relay.On.Req = Query(store)
@@ -144,6 +145,21 @@ func FiltersExceed(n int) func(rely.Client, nostr.Filters) error {
 	return func(_ rely.Client, filters nostr.Filters) error {
 		if len(filters) > n {
 			return ErrTooManyFilters
+		}
+		return nil
+	}
+}
+
+func VagueFilters() func(rely.Client, nostr.Filters) error {
+	return func(_ rely.Client, filters nostr.Filters) error {
+		for _, f := range filters {
+			if len(f.IDs) == 0 &&
+				len(f.Authors) == 0 &&
+				len(f.Kinds) == 0 &&
+				len(f.Tags) == 0 &&
+				f.Search == "" {
+				return errors.New("filters are too vague")
+			}
 		}
 		return nil
 	}
