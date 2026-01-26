@@ -35,7 +35,7 @@ func TestAppSearchQuery(t *testing.T) {
 		FROM events e
 		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ?
-		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`,
 				Args: []any{"\"signal\"", 50},
 			},
@@ -53,7 +53,7 @@ func TestAppSearchQuery(t *testing.T) {
 		FROM events e
 		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ? AND e.id IN (?,?)
-		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`,
 				Args: []any{"\"signal\"", "abc123", "def456", 10},
 			},
@@ -71,7 +71,7 @@ func TestAppSearchQuery(t *testing.T) {
 		FROM events e
 		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ? AND e.pubkey IN (?,?)
-		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`,
 				Args: []any{"\"signal\"", "pubkey1", "pubkey2", 20},
 			},
@@ -90,7 +90,7 @@ func TestAppSearchQuery(t *testing.T) {
 		FROM events e
 		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ? AND e.created_at >= ? AND e.created_at <= ?
-		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`,
 				Args: []any{"\"signal\"", int64(1700000000), int64(1800000000), 100},
 			},
@@ -108,7 +108,7 @@ func TestAppSearchQuery(t *testing.T) {
 		FROM events e
 		JOIN apps_fts fts ON e.id = fts.id
 		WHERE apps_fts MATCH ? AND EXISTS (SELECT 1 FROM tags WHERE event_id = e.id AND key = ? AND value IN (?,?))
-		ORDER BY bm25(apps_fts, 0, 10, 5, 1)
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`,
 				Args: []any{"\"signal\"", "t", "productivity", "tools", 25},
 			},

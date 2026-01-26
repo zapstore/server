@@ -2,6 +2,7 @@ package store
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -27,20 +28,32 @@ func New(c Config) (*sqlite.Store, error) {
 // queryBuilder handles FTS search for apps when there's exactly one app search filter.
 // Otherwise, it delegates to the default query builder.
 func queryBuilder(filters ...nostr.Filter) ([]sqlite.Query, error) {
-	if isAppSearch(filters...) {
-		return appSearchQuery(filters[0])
+	if searchesIn(filters) == 0 {
+		return sqlite.DefaultQueryBuilder(filters...)
 	}
-	return sqlite.DefaultQueryBuilder(filters...)
+
+	if len(filters) > 1 {
+		// We don't support multiple filters when one is using NIP-50 search because the order
+		// of the result events will inevitably be ambiguous.
+		return nil, errors.New("we support only one filter per REQ when using NIP-50 search")
+	}
+
+	search := filters[0]
+	if !slices.Equal(search.Kinds, []int{events.KindApp}) {
+		return nil, fmt.Errorf("We only support NIP-50 search for kind %d", events.KindApp)
+	}
+	return appSearchQuery(search)
 }
 
-// isAppSearch returns true if there is exactly one filter and it is a search query for KindApp only.
-//
-// Note:
-//  1. We don't support multiple filters because they will inevitably change the order of the results,
-//     which will render useless our rank based search.
-//  2. We only support KindApp because that's the only kind we index with FTS.
-func isAppSearch(filters ...nostr.Filter) bool {
-	return len(filters) == 1 && filters[0].Search != "" && slices.Equal(filters[0].Kinds, []int{events.KindApp})
+// searchesIn counts the number of filters with a non-empty search term.
+func searchesIn(filters nostr.Filters) int {
+	count := 0
+	for _, filter := range filters {
+		if filter.Search != "" {
+			count++
+		}
+	}
+	return count
 }
 
 // appSearchQuery builds an FTS query for searching apps.
