@@ -19,9 +19,6 @@ func main() {
 		panic(err)
 	}
 
-	config.Print()
-	return
-
 	limiter := rate.NewLimiter(config.Rate)
 
 	relay, err := relay.Setup(config.Relay, limiter)

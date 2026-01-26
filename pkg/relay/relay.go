@@ -26,7 +26,7 @@ var (
 	ErrEventPubkeyBlocked  = errors.New("event pubkey has not enough reputation. Please contact the Zapstore team.")
 	ErrInternal            = errors.New("internal error, please contact the Zapstore team.")
 	ErrTooManyFilters      = errors.New("number of filters exceed the maximum allowed per REQ")
-	ErrRateLimited         = errors.New("rate-limited: slow down there chief")
+	ErrRateLimited         = errors.New("rate-limited: slow down chief")
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
@@ -116,14 +116,22 @@ func RateConnectionIP(limiter *rate.Limiter[string]) func(_ rely.Stats, request 
 func RateEventIP(limiter *rate.Limiter[string]) func(client rely.Client, _ *nostr.Event) error {
 	return func(client rely.Client, _ *nostr.Event) error {
 		cost := 1.0
-		return RateLimitIP(limiter, client.IP(), cost)
+		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
+			client.Disconnect()
+			return err
+		}
+		return nil
 	}
 }
 
 func RateReqIP(limiter *rate.Limiter[string]) func(client rely.Client, filters nostr.Filters) error {
 	return func(client rely.Client, filters nostr.Filters) error {
 		cost := float64(len(filters))
-		return RateLimitIP(limiter, client.IP(), cost)
+		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
+			client.Disconnect()
+			return err
+		}
+		return nil
 	}
 }
 
