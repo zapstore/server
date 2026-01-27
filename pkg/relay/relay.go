@@ -27,6 +27,10 @@ var (
 	ErrInternal            = errors.New("internal error, please contact the Zapstore team.")
 	ErrTooManyFilters      = errors.New("number of filters exceed the maximum allowed per REQ")
 	ErrRateLimited         = errors.New("rate-limited: slow down chief")
+
+	ErrAppAlreadyExists = errors.New(`failed to publish app: another pubkey has already published an app with the same identifier.
+		This is a precautionary measure because Android doesn't allow apps with the same identifier to be installed side by side.
+		Please use a different identifier or contact the Zapstore team for more information.`)
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
@@ -66,6 +70,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 		rely.InvalidSignature,
 		InvalidStructure(),
 		AuthorNotTrusted(config, vertexFilter),
+		AppAlreadyExists(store),
 	)
 
 	relay.Reject.Req.Clear()
@@ -194,6 +199,45 @@ func IDIsBlocked(ids []string) func(_ rely.Client, e *nostr.Event) error {
 func InvalidStructure() func(_ rely.Client, e *nostr.Event) error {
 	return func(_ rely.Client, e *nostr.Event) error {
 		return events.Validate(e)
+	}
+}
+
+// AppAlreadyExists checks if an app (kind 32267) with the same identifier ("d" tag) has already been published by another pubkey.
+// This is to avoid duplicate apps with the same identifier, as that causes issues on Android.
+//
+// TODO: we should not need this check at all.
+func AppAlreadyExists(store *sqlite.Store) func(_ rely.Client, e *nostr.Event) error {
+	return func(_ rely.Client, e *nostr.Event) error {
+		if e.Kind != events.KindApp {
+			return nil
+		}
+
+		appID, ok := events.Find(e.Tags, "d")
+		if !ok {
+			return nil
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+
+		query := `SELECT COUNT(e.id) 
+					FROM events AS e JOIN tags AS t ON t.event_id = e.id
+					WHERE e.kind = ? 
+					AND e.pubkey != ?
+					AND t.key = 'd' AND t.value = ?`
+		args := []any{events.KindApp, e.PubKey, appID}
+
+		var count int
+		err := store.DB.QueryRowContext(ctx, query, args...).Scan(&count)
+		if err != nil {
+			slog.Error("failed to check if app event with the same id already exists", "error", err)
+			return ErrInternal
+		}
+
+		if count > 0 {
+			return ErrAppAlreadyExists
+		}
+		return nil
 	}
 }
 
