@@ -112,7 +112,7 @@ func (c Config) String() string {
 		"\t\tSource: %s\n"+
 		"\t\tSort: %s\n"+
 		"\t\tThreshold: %f\n",
-		c.SecretKey[:4]+"...REDACTED..."+c.SecretKey[len(c.SecretKey)-4:],
+		c.SecretKey[:4]+"___REDACTED___"+c.SecretKey[len(c.SecretKey)-4:],
 		c.CacheExpiration, c.CacheSize,
 		c.Algorithm.Source,
 		c.Algorithm.Sort,
