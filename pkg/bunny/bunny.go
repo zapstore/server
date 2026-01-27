@@ -24,7 +24,6 @@ type Client struct {
 }
 
 // NewClient returns a client from the provided [Config], which is assumed to have been validated.
-// Internally, it performs a call to checkavailability
 func NewClient(c Config) (Client, error) {
 	client := Client{
 		http:   http.Client{Timeout: c.Timeout},
@@ -35,7 +34,8 @@ func NewClient(c Config) (Client, error) {
 
 // Download the file at the specified path.
 // Returns the reader for the file, or an error if the file does not exist.
-func (c Client) Download(ctx context.Context, path string) (io.Reader, error) {
+// The caller is responsible for closing the reader.
+func (c Client) Download(ctx context.Context, path string) (io.ReadCloser, error) {
 	if path == "" {
 		return nil, fmt.Errorf("failed to download: %w", ErrEmptyPath)
 	}
@@ -53,11 +53,12 @@ func (c Client) Download(ctx context.Context, path string) (io.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to download: %w", err)
 	}
-	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusOK {
 		return res.Body, nil
 	}
+
+	res.Body.Close()
 	if res.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("failed to download: %w", ErrFileNotFound)
 	}
@@ -117,7 +118,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 }
 
 // Delete the file at the specified path.
-// Returns nil if the file was deleted successfully, or if the file did not exists.
+// Returns nil if the file was deleted successfully, or if the file did not exist.
 func (c Client) Delete(ctx context.Context, path string) error {
 	if path == "" {
 		return fmt.Errorf("failed to delete: %w", ErrEmptyPath)
@@ -148,7 +149,6 @@ func (c Client) Delete(ctx context.Context, path string) error {
 // setHeaders sets the common headers for the request.
 func (c Client) setHeaders(r *http.Request) {
 	r.Header.Add("accept", "application/json")
-	r.Header.Add("content-type", "application/json")
 	r.Header.Add("AccessKey", c.config.StorageZone.Password)
 }
 
@@ -163,11 +163,11 @@ func (c Client) getURL(path string) string {
 
 func validateChecksum(sha256 string) error {
 	if len(sha256) != 64 {
-		return fmt.Errorf("failed to upload 1): %w", ErrInvalidChecksum)
+		return ErrInvalidChecksum
 	}
 
 	if _, err := hex.DecodeString(sha256); err != nil {
-		return fmt.Errorf("failed to upload 2): %w", ErrInvalidChecksum)
+		return ErrInvalidChecksum
 	}
 	return nil
 }

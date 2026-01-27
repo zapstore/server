@@ -15,7 +15,7 @@ type StorageZone struct {
 	// The username of the storage zone (e.g. "your-username").
 	Name string `env:"BUNNY_STORAGE_ZONE_NAME"`
 
-	// The endpoint of the primary region of the storage zone (e.g. "https://storage.bunnycdn.com").
+	// The endpoint of the primary region of the storage zone (e.g. "storage.bunnycdn.com").
 	Endpoint string `env:"BUNNY_STORAGE_ZONE_ENDPOINT"`
 
 	// The password of the storage zone (e.g. "your-password").
@@ -32,11 +32,11 @@ func (c Config) Validate() error {
 	if c.StorageZone.Name == "" {
 		return errors.New("storage zone must be specified")
 	}
-	if c.StorageZone.Password == "" {
-		return errors.New("storage zone password must be specified")
-	}
 	if c.StorageZone.Endpoint == "" {
 		return errors.New("storage zone endpoint must be specified")
+	}
+	if len(c.StorageZone.Password) < 8 {
+		return errors.New("storage zone password must be specified and at least 8 characters long")
 	}
 	if c.Timeout < time.Second {
 		return errors.New("timeout must be greater than 1s to function reliably")

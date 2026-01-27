@@ -100,18 +100,23 @@ func TestDownload(t *testing.T) {
 		},
 		{
 			name: "file does not exists",
-			path: "does_not_exist.txt",
+			path: "file_does_not_exist.txt",
 			err:  ErrFileNotFound,
 		},
 		{
 			name: "file exists",
-			path: "test.txt",
+			path: "file_exists.txt",
 		},
 	}
 
 	client, err := NewClient(config)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
+	}
+
+	err = client.Upload(ctx, bytes.NewReader([]byte("This is a test")), "file_exists.txt", "")
+	if err != nil {
+		t.Fatalf("failed to upload file: %v", err)
 	}
 
 	for _, test := range tests {
