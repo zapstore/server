@@ -9,7 +9,7 @@ import (
 
 const KindAppSet = 30267
 
-type AppIdentifier string // 32267:<event_id>:<app_id>
+type AppIdentifier string // 32267:<pubkey>:<app_id>
 
 // AppSet represents a set of app identifiers.
 // Learn more here: https://github.com/nostr-protocol/nips/blob/master/51.md#sets
@@ -33,7 +33,7 @@ func (e AppIdentifier) Validate() error {
 		return fmt.Errorf("invalid app set element: %s", e)
 	}
 	if err := ValidateHash(parts[1]); err != nil {
-		return fmt.Errorf("invalid event ID in app set element: %w", err)
+		return fmt.Errorf("invalid pubkey in app set element: %w", err)
 	}
 	if parts[2] == "" {
 		return fmt.Errorf("invalid app ID in app set element: %s", e)

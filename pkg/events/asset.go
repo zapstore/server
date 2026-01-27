@@ -103,40 +103,72 @@ func ParseAsset(event *nostr.Event) (Asset, error) {
 			asset.URL = tag[1]
 
 		case "m":
+			if asset.MimeType != "" {
+				return Asset{}, fmt.Errorf("duplicate 'm' tag")
+			}
 			asset.MimeType = tag[1]
 
 		case "size":
+			if asset.Size != "" {
+				return Asset{}, fmt.Errorf("duplicate 'size' tag")
+			}
 			asset.Size = tag[1]
 
 		case "min_platform_version":
+			if asset.MinPlatformVersion != "" {
+				return Asset{}, fmt.Errorf("duplicate 'min_platform_version' tag")
+			}
 			asset.MinPlatformVersion = tag[1]
 
 		case "target_platform_version":
+			if asset.TargetPlatformVersion != "" {
+				return Asset{}, fmt.Errorf("duplicate 'target_platform_version' tag")
+			}
 			asset.TargetPlatformVersion = tag[1]
 
 		case "supported_nip":
 			asset.SupportedNIPs = append(asset.SupportedNIPs, tag[1])
 
 		case "filename":
+			if asset.Filename != "" {
+				return Asset{}, fmt.Errorf("duplicate 'filename' tag")
+			}
 			asset.Filename = tag[1]
 
 		case "variant":
-			// Variant can be empty per spec
+			if asset.Variant != "" {
+				return Asset{}, fmt.Errorf("duplicate 'variant' tag")
+			}
 			asset.Variant = tag[1]
 
 		case "commit":
+			if asset.Commit != "" {
+				return Asset{}, fmt.Errorf("duplicate 'commit' tag")
+			}
 			asset.Commit = tag[1]
 
 		case "min_allowed_version":
+			if asset.MinAllowedVersion != "" {
+				return Asset{}, fmt.Errorf("duplicate 'min_allowed_version' tag")
+			}
 			asset.MinAllowedVersion = tag[1]
 
 		case "version_code":
+			if asset.VersionCode != "" {
+				return Asset{}, fmt.Errorf("duplicate 'version_code' tag")
+			}
 			asset.VersionCode = tag[1]
 
 		case "min_allowed_version_code":
+			if asset.MinAllowedVersionCode != "" {
+				return Asset{}, fmt.Errorf("duplicate 'min_allowed_version_code' tag")
+			}
 			asset.MinAllowedVersionCode = tag[1]
 
 		case "apk_certificate_hash":
+			if asset.APKCertificateHashes != nil {
+				return Asset{}, fmt.Errorf("duplicate 'apk_certificate_hash' tag")
+			}
 			asset.APKCertificateHashes = append(asset.APKCertificateHashes, tag[1])
 
 		case "executable":

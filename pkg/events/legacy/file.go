@@ -106,6 +106,12 @@ func ParseFile(event *nostr.Event) (File, error) {
 		}
 
 		switch tag[0] {
+		case "x":
+			if f.Hash != "" {
+				return File{}, fmt.Errorf("duplicate 'x' tag")
+			}
+			f.Hash = tag[1]
+
 		case "url", "fallback":
 			f.URLs = append(f.URLs, tag[1])
 

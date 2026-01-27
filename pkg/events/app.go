@@ -93,9 +93,15 @@ func ParseApp(event *nostr.Event) (App, error) {
 			app.Platforms = append(app.Platforms, tag[1])
 
 		case "summary":
+			if app.Summary != "" {
+				return App{}, fmt.Errorf("duplicate 'summary' tag")
+			}
 			app.Summary = tag[1]
 
 		case "icon":
+			if app.Icon != "" {
+				return App{}, fmt.Errorf("duplicate 'icon' tag")
+			}
 			app.Icon = tag[1]
 
 		case "image":
@@ -108,9 +114,15 @@ func ParseApp(event *nostr.Event) (App, error) {
 			app.URL = tag[1]
 
 		case "repository":
+			if app.Repository != "" {
+				return App{}, fmt.Errorf("duplicate 'repository' tag")
+			}
 			app.Repository = tag[1]
 
 		case "license":
+			if app.License != "" {
+				return App{}, fmt.Errorf("duplicate 'license' tag")
+			}
 			app.License = tag[1]
 		}
 	}

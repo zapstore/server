@@ -40,8 +40,8 @@ func (r Release) Validate() error {
 		return fmt.Errorf("missing 'e' tag (asset ID)")
 	}
 	for i, id := range r.AssetIDs {
-		if id == "" {
-			return fmt.Errorf("empty 'e' tag at index %d", i)
+		if err := ValidateHash(id); err != nil {
+			return fmt.Errorf("invalid 'e' tag at index %d: %w", i, err)
 		}
 	}
 

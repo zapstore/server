@@ -113,6 +113,7 @@ func ParseApp(event *nostr.Event) (App, error) {
 			if app.License != "" {
 				return App{}, fmt.Errorf("duplicate 'license' tag")
 			}
+			app.License = tag[1]
 
 		case "icon":
 			if app.Icon != "" {

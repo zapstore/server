@@ -48,7 +48,12 @@ func ParseAppRelays(event *nostr.Event) (AppRelays, error) {
 			continue
 		}
 
-		relay := AppRelay{URL: tag[1]}
+		relay := AppRelay{
+			URL:   tag[1],
+			Read:  len(tag) == 2, // true if no 'read' or 'write' flags are present
+			Write: len(tag) == 2, // true if no 'read' or 'write' flags are present
+		}
+
 		for _, flag := range tag[2:] {
 			if flag == "read" {
 				relay.Read = true
