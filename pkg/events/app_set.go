@@ -41,6 +41,8 @@ func (e AppIdentifier) Validate() error {
 	return nil
 }
 
+// ParseAppSet extracts a AppSet from a nostr.Event.
+// Returns an error if the event kind is wrong.
 func ParseAppSet(event *nostr.Event) (AppSet, error) {
 	if event.Kind != KindAppSet {
 		return AppSet{}, fmt.Errorf("invalid kind: expected %d, got %d", KindAppSet, event.Kind)
@@ -60,6 +62,7 @@ func ParseAppSet(event *nostr.Event) (AppSet, error) {
 	return appSet, nil
 }
 
+// ValidateAppSet parses and validates a AppSet event.
 func ValidateAppSet(event *nostr.Event) error {
 	appSet, err := ParseAppSet(event)
 	if err != nil {

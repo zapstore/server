@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -10,11 +11,18 @@ import (
 )
 
 // WithValidation is a list of event kinds that have validation functions.
-var WithValidation = []int{KindApp, KindRelease, KindAsset, KindAppSet, legacy.KindFile}
+var WithValidation = []int{
+	KindApp,
+	KindRelease,
+	KindAsset,
+	KindAppSet,
+	KindAppRelays,
+	legacy.KindFile,
+}
 
 // IsZapstoreEvent returns true if the event is a supported Zapstore event type.
 func IsZapstoreEvent(e *nostr.Event) bool {
-	return e.Kind == KindApp || e.Kind == KindRelease || e.Kind == KindAsset || legacy.IsZapstoreEvent(e)
+	return slices.Contains(WithValidation, e.Kind)
 }
 
 // Validate validates an event by routing to the appropriate
@@ -43,6 +51,9 @@ func Validate(event *nostr.Event) error {
 
 	case KindAppSet:
 		return ValidateAppSet(event)
+
+	case KindAppRelays:
+		return ValidateAppRelays(event)
 
 	default:
 		return nil
