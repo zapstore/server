@@ -114,16 +114,29 @@ func TestDownload(t *testing.T) {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	err = client.Upload(ctx, bytes.NewReader([]byte("This is a test")), "file_exists.txt", "")
-	if err != nil {
+	expected := []byte("This is a test")
+	payload := bytes.NewReader(expected)
+
+	if err = client.Upload(ctx, payload, "file_exists.txt", ""); err != nil {
 		t.Fatalf("failed to upload file: %v", err)
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := client.Download(ctx, test.path)
+			data, err := client.Download(ctx, test.path)
 			if !errors.Is(err, test.err) {
 				t.Fatalf("expected error %v, got %v", test.err, err)
+			}
+
+			if err == nil {
+				defer data.Close()
+				actual, err := io.ReadAll(data)
+				if err != nil {
+					t.Fatalf("failed to read data: %v", err)
+				}
+				if !bytes.Equal(actual, expected) {
+					t.Fatalf("expected %v, got %v", expected, actual)
+				}
 			}
 		})
 	}
