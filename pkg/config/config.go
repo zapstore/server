@@ -13,6 +13,7 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/zapstore/server/pkg/bunny"
 	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
 )
@@ -20,6 +21,7 @@ import (
 type Config struct {
 	Relay relay.Config
 	Rate  rate.Config
+	Bunny bunny.Config
 }
 
 // Load creates a new [Config] with default parameters, that get overwritten by env variables when specified.
@@ -40,6 +42,7 @@ func New() Config {
 	return Config{
 		Relay: relay.NewConfig(),
 		Rate:  rate.NewConfig(),
+		Bunny: bunny.NewConfig(),
 	}
 }
 
@@ -50,10 +53,14 @@ func (c Config) Validate() error {
 	if err := c.Rate.Validate(); err != nil {
 		return fmt.Errorf("rate: %w", err)
 	}
+	if err := c.Bunny.Validate(); err != nil {
+		return fmt.Errorf("bunny: %w", err)
+	}
 	return nil
 }
 
 func (c Config) Print() {
 	fmt.Println(c.Relay)
 	fmt.Println(c.Rate)
+	fmt.Println(c.Bunny)
 }
