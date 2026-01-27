@@ -10,13 +10,27 @@ import (
 	"time"
 )
 
-var ctx = context.Background()
-
-// Run this test with:
+// =========================== TESTS ============================
+// Run all tests with:
 //
 // PASSWORD=<your_password> go test
 //
 // Where <your_password> is the password of the Bunny storage zone.
+// ================================================================
+
+var (
+	config = Config{
+		StorageZone: StorageZone{
+			Name:     "zapstore-test",
+			Endpoint: "storage.bunnycdn.com",
+			Password: os.Getenv("PASSWORD"),
+		},
+		Timeout: 10 * time.Second,
+	}
+
+	ctx = context.Background()
+)
+
 func TestUpload(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -57,23 +71,47 @@ func TestUpload(t *testing.T) {
 		},
 	}
 
-	config := Config{
-		StorageZone: StorageZone{
-			Name:     "zapstore-test",
-			Endpoint: "storage.bunnycdn.com",
-			Password: os.Getenv("PASSWORD"),
-		},
-		Timeout: 10 * time.Second,
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client, err := NewClient(config)
-			if err != nil {
-				t.Fatalf("failed to create client: %v", err)
-			}
 
 			err = client.Upload(ctx, test.data, test.path, test.sha256)
+			if !errors.Is(err, test.err) {
+				t.Fatalf("expected error %v, got %v", test.err, err)
+			}
+		})
+	}
+}
+
+func TestDelete(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		err  error
+	}{
+		{
+			name: "invalid path (empty)",
+			path: "",
+			err:  ErrEmptyPath,
+		},
+		{
+			name: "valid delete",
+			path: "test.txt",
+		},
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err = client.Delete(ctx, test.path)
 			if !errors.Is(err, test.err) {
 				t.Fatalf("expected error %v, got %v", test.err, err)
 			}

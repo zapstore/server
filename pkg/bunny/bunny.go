@@ -29,17 +29,13 @@ func NewClient(c Config) (Client, error) {
 		http:   http.Client{Timeout: c.Timeout},
 		config: c,
 	}
-
-	// if err := client.checkAvailability(); err != nil {
-	// 	return Client{}, err
-	// }
 	return client, nil
 }
 
 // Upload the data to the Bunny storage zone with the specified path.
 //
 // If the hex-encoded sha256 is not empty (not ""), it will be used to set the "Checksum" header.
-// If the sha256(data) != sha256, Bunny will reject the upload.
+// If the sha256(data) != sha256, Bunny will reject the upload and [ErrChecksumMismatch] will be returned.
 func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 string) error {
 	if data == nil {
 		return fmt.Errorf("failed to upload: %w", ErrEmptyData)
@@ -53,21 +49,14 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 		}
 	}
 
-	url := fmt.Sprintf("https://%s/%s/%s",
-		c.config.StorageZone.Endpoint,
-		c.config.StorageZone.Name,
-		path,
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodPut, c.getURL(path), data,
 	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, data)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Add("accept", "application/json")
-	req.Header.Add("content-type", "application/json")
-	req.Header.Add("AccessKey", c.config.StorageZone.Password)
-
+	c.setHeaders(req)
 	if sha256 != "" {
 		req.Header.Add("Checksum", strings.ToUpper(sha256))
 	}
@@ -95,17 +84,21 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 	}
 }
 
+// Delete the file at the specified path.
+// Returns nil if the file was deleted successfully, or if the file did not exists.
 func (c Client) Delete(ctx context.Context, path string) error {
-	url := fmt.Sprintf("https://%s/%s/%s",
-		c.config.StorageZone.Endpoint,
-		c.config.StorageZone.Name,
-		path,
-	)
+	if path == "" {
+		return fmt.Errorf("failed to delete: %w", ErrEmptyPath)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	req, err := http.NewRequestWithContext(
+		ctx, http.MethodDelete, c.getURL(path), nil,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
+
+	c.setHeaders(req)
 
 	res, err := c.http.Do(req)
 	if err != nil {
@@ -113,16 +106,25 @@ func (c Client) Delete(ctx context.Context, path string) error {
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("failed to delete: %s", res.Status)
+	if res.StatusCode == http.StatusNotFound ||
+		res.StatusCode == http.StatusOK {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("failed to delete: %s", res.Status)
 }
 
 func (c Client) setHeaders(r *http.Request) {
 	r.Header.Add("accept", "application/json")
 	r.Header.Add("content-type", "application/json")
 	r.Header.Add("AccessKey", c.config.StorageZone.Password)
+}
+
+func (c Client) getURL(path string) string {
+	return fmt.Sprintf("https://%s/%s/%s",
+		c.config.StorageZone.Endpoint,
+		c.config.StorageZone.Name,
+		path,
+	)
 }
 
 func validateChecksum(sha256 string) error {
