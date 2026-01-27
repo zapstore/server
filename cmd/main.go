@@ -26,7 +26,8 @@ func main() {
 		panic(err)
 	}
 
-	if err := relay.StartAndServe(ctx, config.Relay.Port); err != nil {
+	address := "localhost:" + config.Relay.Port
+	if err := relay.StartAndServe(ctx, address); err != nil {
 		panic(err)
 	}
 }

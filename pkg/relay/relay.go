@@ -24,13 +24,16 @@ var (
 	ErrEventKindNotAllowed = errors.New("event kind is not in the allowed list")
 	ErrEventIDBlocked      = errors.New("event ID is blocked")
 	ErrEventPubkeyBlocked  = errors.New("event pubkey has not enough reputation. Please contact the Zapstore team.")
-	ErrInternal            = errors.New("internal error, please contact the Zapstore team.")
-	ErrTooManyFilters      = errors.New("number of filters exceed the maximum allowed per REQ")
-	ErrRateLimited         = errors.New("rate-limited: slow down chief")
 
-	ErrAppAlreadyExists = errors.New(`failed to publish app: another pubkey has already published an app with the same identifier.
+	ErrAppAlreadyExists = errors.New(`failed to publish app: another pubkey has already published an app with the same 'd' tag identifier.
 		This is a precautionary measure because Android doesn't allow apps with the same identifier to be installed side by side.
 		Please use a different identifier or contact the Zapstore team for more information.`)
+
+	ErrTooManyFilters  = errors.New("number of filters exceed the maximum allowed per REQ")
+	ErrFiltersTooVague = errors.New("filters are too vague")
+
+	ErrInternal    = errors.New("internal error, please contact the Zapstore team.")
+	ErrRateLimited = errors.New("rate-limited: slow down chief")
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
@@ -163,19 +166,44 @@ func FiltersExceed(n int) func(rely.Client, nostr.Filters) error {
 	}
 }
 
+// VagueFilters rejects filters that are too vague, as determined by the specificity scoring mechanism.
 func VagueFilters() func(rely.Client, nostr.Filters) error {
 	return func(_ rely.Client, filters nostr.Filters) error {
 		for _, f := range filters {
-			if len(f.IDs) == 0 &&
-				len(f.Authors) == 0 &&
-				len(f.Kinds) == 0 &&
-				len(f.Tags) == 0 &&
-				f.Search == "" {
-				return errors.New("filters are too vague")
+			if specificity(f) < 2 {
+				return ErrFiltersTooVague
 			}
 		}
 		return nil
 	}
+}
+
+// specificity estimates how specific a filter is, based on the presence of conditions.
+// TODO: make it more accurate by considering what the conditions are (e.g. 1 kind vs 10 kinds).
+func specificity(filter nostr.Filter) int {
+	points := 0
+	if len(filter.IDs) > 0 {
+		points += 10
+	}
+	if filter.Search != "" {
+		points += 3
+	}
+	if len(filter.Authors) > 0 {
+		points += 2
+	}
+	if len(filter.Tags) > 0 {
+		points += 2
+	}
+	if len(filter.Kinds) > 0 {
+		points += 1
+	}
+	if filter.Since != nil {
+		points += 1
+	}
+	if filter.Until != nil {
+		points += 1
+	}
+	return points
 }
 
 func KindNotAllowed(kinds []int) func(_ rely.Client, e *nostr.Event) error {
