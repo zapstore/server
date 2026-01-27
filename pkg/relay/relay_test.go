@@ -35,15 +35,15 @@ func TestRateLimiting(t *testing.T) {
 	blocked := false
 
 spamming:
-	for range 10_000 {
+	for range 1000 {
 		select {
 		case err := <-exitErr:
 			t.Fatalf("failed to start and serve the relay: %v", err)
 		default:
 			// proceed to spam
-			filter := nostr.Filter{Kinds: []int{1}}
 
-			if _, err := conn.QueryEvents(t.Context(), filter); err != nil {
+			_, err := conn.QueryEvents(t.Context(), nostr.Filter{Kinds: []int{1}})
+			if err != nil {
 				if strings.Contains(err.Error(), "failed to write") {
 					blocked = true
 					break spamming
