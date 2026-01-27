@@ -87,6 +87,43 @@ func TestUpload(t *testing.T) {
 	}
 }
 
+func TestDownload(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		err  error
+	}{
+		{
+			name: "invalid path (empty)",
+			path: "",
+			err:  ErrEmptyPath,
+		},
+		{
+			name: "file does not exists",
+			path: "does_not_exist.txt",
+			err:  ErrFileNotFound,
+		},
+		{
+			name: "file exists",
+			path: "test.txt",
+		},
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := client.Download(ctx, test.path)
+			if !errors.Is(err, test.err) {
+				t.Fatalf("expected error %v, got %v", test.err, err)
+			}
+		})
+	}
+}
+
 func TestDelete(t *testing.T) {
 	tests := []struct {
 		name string
@@ -99,7 +136,11 @@ func TestDelete(t *testing.T) {
 			err:  ErrEmptyPath,
 		},
 		{
-			name: "valid delete",
+			name: "valid delete (file exists)",
+			path: "test.txt",
+		},
+		{
+			name: "valid delete (file does not exist)",
 			path: "test.txt",
 		},
 	}
