@@ -11,7 +11,9 @@ const KindAppSet = 30267
 
 type AppIdentifier string // 32267:<event_id>:<app_id>
 
-type AppSet []AppIdentifier // a set of app identifiers
+// AppSet represents a set of app identifiers.
+// Learn more here: https://github.com/nostr-protocol/nips/blob/master/51.md#sets
+type AppSet []AppIdentifier
 
 func (s AppSet) Validate() error {
 	for _, e := range s {
