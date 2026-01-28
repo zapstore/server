@@ -3,6 +3,7 @@ package blossom
 import (
 	"fmt"
 
+	"github.com/pippellia-btc/blossom"
 	"github.com/zapstore/server/pkg/bunny"
 )
 
@@ -14,12 +15,30 @@ type Config struct {
 	// Port is the port the blossom server will listen on. Default is "3335".
 	Port string `env:"BLOSSOM_PORT"`
 
+	// AllowedContentTypes is a list of content types that are allowed to be uploaded to the blossom server.
+	// Default is "application/vnd.android.package-archive" and common image types.
+	AllowedContentTypes []string `env:"BLOSSOM_ALLOWED_CONTENT_TYPES"`
+
+	// BlockedBlobs is a list of blob hashes that are blocked from being published to the blossom server.
+	// Default is empty.
+	BlockedBlobs []string `env:"BLOSSOM_BLOCKED_BLOB_HASHES"`
+
 	Bunny bunny.Config
 }
 
 func NewConfig() Config {
 	return Config{
-		Port:  "3335",
+		Port: "3335",
+		AllowedContentTypes: []string{
+			"application/vnd.android.package-archive",
+			"image/jpeg",
+			"image/png",
+			"image/webp",
+			"image/gif",
+			"image/heic",
+			"image/heif",
+			"image/svg+xml",
+		},
 		Bunny: bunny.NewConfig(),
 	}
 }
@@ -31,6 +50,19 @@ func (c Config) Validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("port is required")
 	}
+
+	for _, mime := range c.AllowedContentTypes {
+		if mime == "" {
+			return fmt.Errorf("allowed content type is empty")
+		}
+	}
+
+	for i, hash := range c.BlockedBlobs {
+		if _, err := blossom.ParseHash(hash); err != nil {
+			return fmt.Errorf("blocked blob hash is invalid at index %d: %w", i, err)
+		}
+	}
+
 	if err := c.Bunny.Validate(); err != nil {
 		return fmt.Errorf("bunny: %w", err)
 	}
@@ -41,5 +73,7 @@ func (c Config) String() string {
 	return fmt.Sprintf("Blossom:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
-		c.Bunny.String(), c.Domain, c.Port)
+		"\tAllowedContentTypes: %v\n"+
+		"\tBlockedBlobs: %v\n"+
+		c.Bunny.String(), c.Domain, c.Port, c.AllowedContentTypes, c.BlockedBlobs)
 }

@@ -148,7 +148,7 @@ func RateLimitIP(limiter *rate.Limiter[string], ip rely.IP, cost float64) error 
 	reject, err := limiter.Reject(ip.Group(), cost)
 	if err != nil {
 		// fail open policy; if the rate limiter fails, we allow the request
-		slog.Error("rate limiter failed", "error", err)
+		slog.Error("relay: rate limiter failed", "error", err)
 		return nil
 	}
 	if reject {
@@ -302,7 +302,7 @@ func AuthorNotTrusted(config Config, vertex vertex.Filter) func(_ rely.Client, e
 			return nil
 
 		default:
-			slog.Error("unknown pubkey policy", "policy", config.UnknownPubkeyPolicy)
+			slog.Error("relay: unknown pubkey policy", "policy", config.UnknownPubkeyPolicy)
 			return ErrInternal
 		}
 	}
