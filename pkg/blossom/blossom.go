@@ -29,6 +29,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 
 	blossom.Reject.Upload.Append(
 		RateUploadIP(limiter),
+		MissingHints(),
 		TypeNotAllowed(config.AllowedContentTypes),
 		BlobIsBlocked(config.BlockedBlobs),
 	)
@@ -45,11 +46,28 @@ func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints bl
 
 // UploadCost estimates the cost in tokens for an upload based on the clients hints.
 func UploadCost(hints blossy.UploadHints) float64 {
-	if hints.Size == -1 {
+	if hints.Size == -1 || hints.Size == 0 {
+		// default cost is very high to punish clients that don't provide the size (-1)
+		// or provided a clearly false size of 0.
 		return 100
 	}
 	// The cost is roughly 1 token per 10 MB.
 	return float64(hints.Size) / 10_000_000
+}
+
+func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+		if hints.Hash.Hex() == "" {
+			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Digest' header is required"}
+		}
+		if hints.Type == "" {
+			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Type' header is required"}
+		}
+		if hints.Size == -1 {
+			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Length' header is required"}
+		}
+		return nil
+	}
 }
 
 func TypeNotAllowed(allowed []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
