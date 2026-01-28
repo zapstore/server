@@ -1,12 +1,13 @@
 module github.com/zapstore/server
 
-go 1.24.1
+go 1.25
 
 require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.52.0
+	github.com/pippellia-btc/blossy v0.1.3
 	github.com/pippellia-btc/rate v0.1.0
 	github.com/pippellia-btc/rely v1.2.2
 	github.com/vertex-lab/nostr-sqlite v0.3.7
@@ -31,6 +32,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/pippellia-btc/blossom v0.3.0 // indirect
 	github.com/pippellia-btc/smallset v0.4.2 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect

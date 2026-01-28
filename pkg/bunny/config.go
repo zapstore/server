@@ -56,10 +56,15 @@ func (s StorageZone) String() string {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf(
-		"Bunny:\n"+
-			"\tRequest Timeout: %v\n"+
-			c.StorageZone.String(),
+	return fmt.Sprintf("Bunny:\n"+
+		"\tRequest Timeout: %v\n"+
+		"\tStorageZone:\n"+
+		"\t\tName: %s\n"+
+		"\t\tEndpoint: %s\n"+
+		"\t\tPassword: %s\n",
 		c.Timeout,
+		c.StorageZone.Name,
+		c.StorageZone.Endpoint,
+		c.StorageZone.Password[:4]+"___REDACTED___"+c.StorageZone.Password[len(c.StorageZone.Password)-4:],
 	)
 }
