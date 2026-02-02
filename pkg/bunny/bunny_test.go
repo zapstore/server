@@ -4,32 +4,33 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"os"
 	"testing"
-	"time"
+
+	"github.com/caarlos0/env/v11"
+	_ "github.com/joho/godotenv/autoload"
 )
 
 // =========================== TESTS ============================
-// Run all tests with:
+// The tests require a .env file with the following variables:
+// - BUNNY_STORAGE_ZONE_NAME
+// - BUNNY_STORAGE_ZONE_ENDPOINT
+// - BUNNY_STORAGE_ZONE_PASSWORD
 //
-// PASSWORD=<your_password> go test
-//
-// Where <your_password> is the password of the Bunny storage zone.
+// Configure these by checking your Bunny dashboard.
 // ================================================================
 
 var (
-	config = Config{
-		StorageZone: StorageZone{
-			Name:     "zapstore-test",
-			Endpoint: "storage.bunnycdn.com",
-			Password: os.Getenv("PASSWORD"),
-		},
-		Timeout: 10 * time.Second,
-	}
-
-	ctx = context.Background()
+	config = NewConfig()
+	ctx    = context.Background()
 )
+
+func init() {
+	if err := env.Parse(&config); err != nil {
+		panic(fmt.Errorf("failed to parse config: %w", err))
+	}
+}
 
 func TestUpload(t *testing.T) {
 	tests := []struct {
