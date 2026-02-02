@@ -3,12 +3,18 @@ package bunny
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 )
 
 type Config struct {
 	StorageZone StorageZone
-	Timeout     time.Duration `env:"BUNNY_REQUEST_TIMEOUT"`
+
+	// The endpoint of the CDN (e.g. "https://zapstore.b-cdn.net").
+	CDN string `env:"BUNNY_CDN_URL"`
+
+	// The timeout for the requests to the Bunny storage zone. Default is 10 seconds.
+	Timeout time.Duration `env:"BUNNY_REQUEST_TIMEOUT"`
 }
 
 type StorageZone struct {
@@ -41,6 +47,12 @@ func (c Config) Validate() error {
 	if c.Timeout < time.Second {
 		return errors.New("timeout must be greater than 1s to function reliably")
 	}
+	if c.CDN == "" {
+		return errors.New("CDN URL must be specified")
+	}
+	if _, err := url.Parse(c.CDN); err != nil {
+		return fmt.Errorf("invalid CDN URL: %w", err)
+	}
 	return nil
 }
 
@@ -58,11 +70,13 @@ func (s StorageZone) String() string {
 func (c Config) String() string {
 	return fmt.Sprintf("Bunny:\n"+
 		"\tRequest Timeout: %v\n"+
+		"\tCDN URL: %s\n"+
 		"\tStorageZone:\n"+
 		"\t\tName: %s\n"+
 		"\t\tEndpoint: %s\n"+
 		"\t\tPassword: %s\n",
 		c.Timeout,
+		c.CDN,
 		c.StorageZone.Name,
 		c.StorageZone.Endpoint,
 		c.StorageZone.Password[:4]+"___REDACTED___"+c.StorageZone.Password[len(c.StorageZone.Password)-4:],

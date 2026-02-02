@@ -17,8 +17,11 @@ import (
 // - BUNNY_STORAGE_ZONE_NAME
 // - BUNNY_STORAGE_ZONE_ENDPOINT
 // - BUNNY_STORAGE_ZONE_PASSWORD
+// - BUNNY_CDN_URL
 //
 // Configure these by checking your Bunny dashboard.
+//
+// Note: these tests require the file "file_exists.txt" to be present in the Bunny storage zone.
 // ================================================================
 
 var (
@@ -138,6 +141,54 @@ func TestDownload(t *testing.T) {
 				if !bytes.Equal(actual, expected) {
 					t.Fatalf("expected %v, got %v", expected, actual)
 				}
+			}
+		})
+	}
+}
+
+func TestCheck(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		mime string
+		size int64
+		err  error
+	}{
+		{
+			name: "invalid path (empty)",
+			path: "",
+			err:  ErrEmptyPath,
+		},
+		{
+			name: "file does not exists",
+			path: "file_does_not_exist.txt",
+			err:  ErrFileNotFound,
+		},
+		{
+			name: "file exists",
+			path: "file_exists.txt",
+			mime: "text/plain",
+			size: 14,
+		},
+	}
+
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mime, size, err := client.Check(ctx, test.path)
+			if !errors.Is(err, test.err) {
+				t.Fatalf("expected error %v, got %v", test.err, err)
+			}
+
+			if mime != test.mime {
+				t.Fatalf("expected mime %v, got %v", test.mime, mime)
+			}
+			if size != test.size {
+				t.Fatalf("expected size %v, got %v", test.size, size)
 			}
 		})
 	}
