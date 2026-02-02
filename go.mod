@@ -8,7 +8,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/pippellia-btc/blossom v0.4.7
-	github.com/pippellia-btc/blossy v0.2.0
+	github.com/pippellia-btc/blossy v0.2.1
 	github.com/pippellia-btc/rate v0.1.0
 	github.com/pippellia-btc/rely v1.2.2
 	github.com/vertex-lab/nostr-sqlite v0.3.7

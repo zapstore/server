@@ -17,11 +17,11 @@ type Config struct {
 
 	// AllowedContentTypes is a list of content types that are allowed to be uploaded to the blossom server.
 	// Default is "application/vnd.android.package-archive" and common image types.
-	AllowedContentTypes []string `env:"BLOSSOM_ALLOWED_CONTENT_TYPES"`
+	AllowedMedia []string `env:"BLOSSOM_ALLOWED_MEDIA"`
 
 	// BlockedBlobs is a list of blob hashes that are blocked from being published to the blossom server.
 	// Default is empty.
-	BlockedBlobs []string `env:"BLOSSOM_BLOCKED_BLOB_HASHES"`
+	BlockedBlobs []string `env:"BLOSSOM_BLOCKED_BLOBS"`
 
 	Bunny bunny.Config
 }
@@ -29,7 +29,7 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		Port: "3335",
-		AllowedContentTypes: []string{
+		AllowedMedia: []string{
 			"application/vnd.android.package-archive",
 			"image/jpeg",
 			"image/png",
@@ -51,9 +51,9 @@ func (c Config) Validate() error {
 		return fmt.Errorf("port is required")
 	}
 
-	for _, mime := range c.AllowedContentTypes {
+	for _, mime := range c.AllowedMedia {
 		if mime == "" {
-			return fmt.Errorf("allowed content type is empty")
+			return fmt.Errorf("allowed media type is empty")
 		}
 	}
 
@@ -73,7 +73,7 @@ func (c Config) String() string {
 	return fmt.Sprintf("Blossom:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
-		"\tAllowedContentTypes: %v\n"+
-		"\tBlockedBlobs: %v\n"+
-		c.Bunny.String(), c.Domain, c.Port, c.AllowedContentTypes, c.BlockedBlobs)
+		"\tAllowed Media: %v\n"+
+		"\tBlocked Blobs: %v\n"+
+		c.Bunny.String(), c.Domain, c.Port, c.AllowedMedia, c.BlockedBlobs)
 }

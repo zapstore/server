@@ -3,22 +3,18 @@
 package blossom
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rate"
 	"github.com/zapstore/server/pkg/bunny"
-)
-
-var (
-	ErrTypeNotAllowed = &blossom.Error{Code: http.StatusUnsupportedMediaType, Reason: "content type not allowed"}
-	ErrRateLimited    = &blossom.Error{Code: http.StatusTooManyRequests, Reason: "rate-limited: slow down chief"}
-	ErrInternal       = &blossom.Error{Code: http.StatusInternalServerError, Reason: "internal error, please contact the Zapstore team."}
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error) {
@@ -28,7 +24,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 	}
 
 	blossom, err := blossy.NewServer(
-		blossy.WithBaseURL(config.Domain),
+		blossy.WithBaseURL("https://" + config.Domain),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup blossom server: %w", err)
@@ -37,7 +33,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 	blossom.Reject.Upload.Append(
 		RateUploadIP(limiter),
 		MissingHints(),
-		TypeNotAllowed(config.AllowedContentTypes),
+		MediaNotAllowed(config.AllowedMedia),
 		BlobIsBlocked(config.BlockedBlobs),
 	)
 
@@ -47,28 +43,45 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 	return blossom, nil
 }
 
-func Upload(client bunny.Client) func(_ blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
-		path := hints.Hash.Hex()
+		name := hints.Hash.Hex() + blossom.ExtFromType(hints.Type)
 		sha256 := hints.Hash.Hex()
 
-		err := client.Upload(r.Context(), data, path, sha256)
-		if err != nil {
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("failed to upload blob")
+		if err := client.Upload(r.Context(), data, name, sha256); err != nil {
+			if errors.Is(err, bunny.ErrChecksumMismatch) {
+				// TODO: punish the client for providing a bad hash
+				return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
+			}
+			slog.Error("blossom: failed to upload blob", "error", err, "name", name)
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		// TODO: get the blob meta from bunny and check if the client provided the correct data
+		mime, size, err := client.Check(r.Context(), name)
+		if err != nil {
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+		}
+
+		if size != hints.Size {
+			// TODO: punish the client for providing a bad size
+		}
+		if mime != hints.Type {
+			// TODO: punish the client for providing a bad mime
+		}
+
 		return blossom.BlobDescriptor{
-			Hash: hints.Hash,
-			Type: hints.Type,
-			Size: hints.Size,
+			Hash:     hints.Hash,
+			Type:     mime,
+			Size:     size,
+			Uploaded: time.Now().UTC().Unix(),
 		}, nil
 	}
 }
 
 func Download(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
 	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
-		return blossy.Redirect("example.com", http.StatusTemporaryRedirect), nil
+		path := client.CDN() + "/" + hash.Hex() + "." + ext
+		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
 	}
 }
 
@@ -81,7 +94,7 @@ func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints bl
 
 // UploadCost estimates the cost in tokens for an upload based on the clients hints.
 func UploadCost(hints blossy.UploadHints) float64 {
-	if hints.Size == -1 || hints.Size == 0 {
+	if hints.Size <= 0 {
 		// default cost is very high to punish clients that don't provide the size (-1)
 		// or provided a clearly false size of 0.
 		return 100
@@ -93,23 +106,23 @@ func UploadCost(hints blossy.UploadHints) float64 {
 func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		if hints.Hash.Hex() == "" {
-			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Digest' header is required"}
+			return blossom.ErrBadRequest("'Content-Digest' header is required")
 		}
 		if hints.Type == "" {
-			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Type' header is required"}
+			return blossom.ErrBadRequest("'Content-Type' header is required")
 		}
 		if hints.Size == -1 {
-			return &blossom.Error{Code: http.StatusBadRequest, Reason: "'Content-Length' header is required"}
+			return blossom.ErrBadRequest("'Content-Length' header is required")
 		}
 		return nil
 	}
 }
 
-func TypeNotAllowed(allowed []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+func MediaNotAllowed(allowed []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		if !slices.Contains(allowed, hints.Type) {
 			reason := fmt.Sprintf("content type is not in the allowed list: %v", allowed)
-			return &blossom.Error{Code: http.StatusUnsupportedMediaType, Reason: reason}
+			return blossom.ErrUnsupportedMedia(reason)
 		}
 		return nil
 	}
@@ -118,7 +131,7 @@ func TypeNotAllowed(allowed []string) func(r blossy.Request, hints blossy.Upload
 func BlobIsBlocked(blocked []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		if slices.Contains(blocked, hints.Hash.Hex()) {
-			return &blossom.Error{Code: http.StatusForbidden, Reason: "this blob is blocked"}
+			return blossom.ErrForbidden("this blob is blocked")
 		}
 		return nil
 	}
@@ -133,7 +146,7 @@ func RateLimitIP(limiter *rate.Limiter[string], ip blossy.IP, cost float64) *blo
 		return nil
 	}
 	if reject {
-		return ErrRateLimited
+		return blossom.ErrTooMany("rate-limited: slow down chief")
 	}
 	return nil
 }
