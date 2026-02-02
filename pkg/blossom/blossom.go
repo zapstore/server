@@ -4,6 +4,7 @@ package blossom
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rate"
+	"github.com/zapstore/server/pkg/bunny"
 )
 
 var (
@@ -20,6 +22,11 @@ var (
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error) {
+	bunny, err := bunny.NewClient(config.Bunny)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup bunny client: %w", err)
+	}
+
 	blossom, err := blossy.NewServer(
 		blossy.WithBaseURL(config.Domain),
 	)
@@ -34,7 +41,35 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 		BlobIsBlocked(config.BlockedBlobs),
 	)
 
+	blossom.On.Download = Download(bunny)
+	blossom.On.Upload = Upload(bunny)
+
 	return blossom, nil
+}
+
+func Upload(client bunny.Client) func(_ blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+		path := hints.Hash.Hex()
+		sha256 := hints.Hash.Hex()
+
+		err := client.Upload(r.Context(), data, path, sha256)
+		if err != nil {
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("failed to upload blob")
+		}
+
+		// TODO: get the blob meta from bunny and check if the client provided the correct data
+		return blossom.BlobDescriptor{
+			Hash: hints.Hash,
+			Type: hints.Type,
+			Size: hints.Size,
+		}, nil
+	}
+}
+
+func Download(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
+	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
+		return blossy.Redirect("example.com", http.StatusTemporaryRedirect), nil
+	}
 }
 
 func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {

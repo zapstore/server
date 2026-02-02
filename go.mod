@@ -7,8 +7,8 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.52.0
-	github.com/pippellia-btc/blossom v0.3.0
-	github.com/pippellia-btc/blossy v0.1.3
+	github.com/pippellia-btc/blossom v0.4.7
+	github.com/pippellia-btc/blossy v0.2.0
 	github.com/pippellia-btc/rate v0.1.0
 	github.com/pippellia-btc/rely v1.2.2
 	github.com/vertex-lab/nostr-sqlite v0.3.7
