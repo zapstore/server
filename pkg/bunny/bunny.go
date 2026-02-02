@@ -2,13 +2,14 @@ package bunny
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/pippellia-btc/blossom"
 )
 
 var (
@@ -31,6 +32,25 @@ func NewClient(c Config) (Client, error) {
 		config: c,
 	}
 	return client, nil
+}
+
+// CDN returns the CDN endpoint.
+func (c Client) CDN() string {
+	return c.config.CDN
+}
+
+// storageURL returns the request URL for the provided path.
+func (c Client) storageURL(path string) string {
+	return fmt.Sprintf("https://%s/%s/%s",
+		c.config.StorageZone.Endpoint,
+		c.config.StorageZone.Name,
+		path,
+	)
+}
+
+// cdnURL returns the request URL for the provided path on the CDN.
+func (c Client) cdnURL(path string) string {
+	return fmt.Sprintf("%s/%s", c.config.CDN, path)
 }
 
 // Download the file at the specified path.
@@ -115,7 +135,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 		return fmt.Errorf("failed to upload: %w", ErrEmptyPath)
 	}
 	if sha256 != "" {
-		if err := validateChecksum(sha256); err != nil {
+		if err := blossom.ValidateHash(sha256); err != nil {
 			return fmt.Errorf("failed to upload: %w", err)
 		}
 	}
@@ -144,7 +164,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 
 	case http.StatusBadRequest:
 		body, _ := io.ReadAll(res.Body)
-		if strings.Contains(string(body), "Checksum mismatch") {
+		if strings.Contains(string(body), "Checksum") {
 			return fmt.Errorf("failed to upload: %w", ErrChecksumMismatch)
 		}
 		return fmt.Errorf("failed to upload: status %s: body %s", res.Status, string(body))
@@ -188,29 +208,4 @@ func (c Client) Delete(ctx context.Context, path string) error {
 func (c Client) setHeaders(r *http.Request) {
 	r.Header.Add("accept", "application/json")
 	r.Header.Add("AccessKey", c.config.StorageZone.Password)
-}
-
-// storageURL returns the request URL for the provided path.
-func (c Client) storageURL(path string) string {
-	return fmt.Sprintf("https://%s/%s/%s",
-		c.config.StorageZone.Endpoint,
-		c.config.StorageZone.Name,
-		path,
-	)
-}
-
-// cdnURL returns the request URL for the provided path on the CDN.
-func (c Client) cdnURL(path string) string {
-	return fmt.Sprintf("%s/%s", c.config.CDN, path)
-}
-
-func validateChecksum(sha256 string) error {
-	if len(sha256) != 64 {
-		return ErrInvalidChecksum
-	}
-
-	if _, err := hex.DecodeString(sha256); err != nil {
-		return ErrInvalidChecksum
-	}
-	return nil
 }
