@@ -1,3 +1,5 @@
+// The bunny package is responsible for interacting with the Bunny Storage Zone and CDN.
+// It exposes a [NewClient] function to create a new client with the given config.
 package bunny
 
 import (
