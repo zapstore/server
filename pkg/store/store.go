@@ -1,3 +1,5 @@
+// The store package is responsible for storing nostr events in a sqlite database.
+// It exposes a [New] function to create a new sqlite store with the given config.
 package store
 
 import (
@@ -60,7 +62,8 @@ func searchesIn(filters nostr.Filters) int {
 // Results are ordered by BM25 relevance with custom weights.
 func appSearchQuery(filter nostr.Filter) ([]sqlite.Query, error) {
 	if len(filter.Search) < 3 {
-		return nil, fmt.Errorf("search term must be at least 3 characters")
+		return nil, fmt.Errorf("search term must be at least 3 characters") // because of the trigram tokenizer
+
 	}
 
 	filter.Search = escapeFTS5(filter.Search)
