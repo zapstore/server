@@ -15,7 +15,7 @@ import (
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rate"
-	"github.com/zapstore/server/pkg/bunny"
+	"github.com/zapstore/server/pkg/blossom/bunny"
 )
 
 func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pippellia-btc/blossom"
-	"github.com/zapstore/server/pkg/bunny"
+	"github.com/zapstore/server/pkg/blossom/bunny"
 )
 
 type Config struct {

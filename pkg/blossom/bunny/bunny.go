@@ -138,7 +138,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 	}
 	if sha256 != "" {
 		if err := blossom.ValidateHash(sha256); err != nil {
-			return fmt.Errorf("failed to upload: %w", err)
+			return fmt.Errorf("failed to upload: %w: %w", ErrInvalidChecksum, err)
 		}
 	}
 
