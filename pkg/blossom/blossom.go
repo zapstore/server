@@ -45,7 +45,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 
 func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
-		name := hints.Hash.Hex() + blossom.ExtFromType(hints.Type)
+		name := hints.Hash.Hex() + "." + blossom.ExtFromType(hints.Type)
 		sha256 := hints.Hash.Hex()
 
 		if err := client.Upload(r.Context(), data, name, sha256); err != nil {
