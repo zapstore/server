@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/pippellia-btc/blossom"
@@ -30,6 +31,14 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 		return nil, fmt.Errorf("failed to setup blossom server: %w", err)
 	}
 
+	blossom.Reject.Check.Append(
+		RateCheckIP(limiter),
+	)
+
+	blossom.Reject.Download.Append(
+		RateDownloadIP(limiter),
+	)
+
 	blossom.Reject.Upload.Append(
 		RateUploadIP(limiter),
 		MissingHints(),
@@ -37,14 +46,39 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 		BlobIsBlocked(config.BlockedBlobs),
 	)
 
+	blossom.On.Check = Check(bunny)
 	blossom.On.Download = Download(bunny)
 	blossom.On.Upload = Upload(bunny)
-
 	return blossom, nil
+}
+
+func Check(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
+	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
+		if ext == "" {
+			// TODO: find the extention from the hash using the stats database
+			return nil, blossom.ErrBadRequest("extension is required")
+		}
+
+		path := client.CDN() + "/" + hash.Hex() + "." + ext
+		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
+	}
+}
+
+func Download(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
+	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
+		if ext == "" {
+			// TODO: find the extention from the hash using the stats database
+			return nil, blossom.ErrBadRequest("extension is required")
+		}
+
+		path := client.CDN() + "/" + hash.Hex() + "." + ext
+		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
+	}
 }
 
 func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+
 		name := hints.Hash.Hex() + "." + blossom.ExtFromType(hints.Type)
 		sha256 := hints.Hash.Hex()
 
@@ -78,20 +112,6 @@ func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints
 	}
 }
 
-func Download(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
-	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
-		path := client.CDN() + "/" + hash.Hex() + "." + ext
-		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
-	}
-}
-
-func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-		cost := UploadCost(hints)
-		return RateLimitIP(limiter, r.IP(), cost)
-	}
-}
-
 // UploadCost estimates the cost in tokens for an upload based on the clients hints.
 func UploadCost(hints blossy.UploadHints) float64 {
 	if hints.Size <= 0 {
@@ -121,7 +141,7 @@ func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Er
 func MediaNotAllowed(allowed []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		if !slices.Contains(allowed, hints.Type) {
-			reason := fmt.Sprintf("content type is not in the allowed list: %v", allowed)
+			reason := fmt.Sprintf("content type is not in the allowed list: %s", strings.Join(allowed, ", "))
 			return blossom.ErrUnsupportedMedia(reason)
 		}
 		return nil
@@ -134,6 +154,27 @@ func BlobIsBlocked(blocked []string) func(r blossy.Request, hints blossy.UploadH
 			return blossom.ErrForbidden("this blob is blocked")
 		}
 		return nil
+	}
+}
+
+func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+		cost := UploadCost(hints)
+		return RateLimitIP(limiter, r.IP(), cost)
+	}
+}
+
+func RateDownloadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+		cost := 10.0
+		return RateLimitIP(limiter, r.IP(), cost)
+	}
+}
+
+func RateCheckIP(limiter *rate.Limiter[string]) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+		cost := 1.0
+		return RateLimitIP(limiter, r.IP(), cost)
 	}
 }
 
