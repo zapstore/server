@@ -9,7 +9,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/zapstore/server/pkg/events"
-	"github.com/zapstore/server/pkg/store"
+	"github.com/zapstore/server/pkg/relay/store"
 	"github.com/zapstore/server/pkg/vertex"
 )
 

@@ -16,7 +16,7 @@ import (
 	"github.com/pippellia-btc/rely"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/events"
-	"github.com/zapstore/server/pkg/store"
+	"github.com/zapstore/server/pkg/relay/store"
 	"github.com/zapstore/server/pkg/vertex"
 )
 
