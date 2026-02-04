@@ -38,7 +38,7 @@ func main() {
 		panic(err)
 	}
 
-	blossom, err := blossom.Setup(config.Blossom, limiter)
+	blossom, err := blossom.Setup(config.Blossom, limiter, acl)
 	if err != nil {
 		panic(err)
 	}

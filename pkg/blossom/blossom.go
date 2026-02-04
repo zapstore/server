@@ -15,10 +15,11 @@ import (
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rate"
+	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom/bunny"
 )
 
-func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error) {
+func Setup(config Config, limiter *rate.Limiter[string], acl *acl.Controller) (*blossy.Server, error) {
 	bunny, err := bunny.NewClient(config.Bunny)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup bunny client: %w", err)
@@ -43,7 +44,7 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*blossy.Server, error)
 		RateUploadIP(limiter),
 		MissingHints(),
 		MediaNotAllowed(config.AllowedMedia),
-		BlobIsBlocked(config.BlockedBlobs),
+		BlobIsBlocked(acl),
 	)
 
 	blossom.On.Check = Check(bunny)
@@ -148,9 +149,9 @@ func MediaNotAllowed(allowed []string) func(r blossy.Request, hints blossy.Uploa
 	}
 }
 
-func BlobIsBlocked(blocked []string) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+func BlobIsBlocked(acl *acl.Controller) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-		if slices.Contains(blocked, hints.Hash.Hex()) {
+		if acl.IsBlobBlocked(hints.Hash) {
 			return blossom.ErrForbidden("this blob is blocked")
 		}
 		return nil
