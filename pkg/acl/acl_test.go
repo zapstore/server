@@ -41,6 +41,36 @@ func TestManualHotReload(t *testing.T) {
 	time.Sleep(30 * time.Second)
 }
 
+func TestToPubkey(t *testing.T) {
+	tests := []struct {
+		name     string
+		pubkey   string
+		expected string
+	}{
+		{
+			pubkey:   "726a1e261cc6474674e8285e3951b3bb139be9a773d1acf49dc868db861a1c11",
+			expected: "726a1e261cc6474674e8285e3951b3bb139be9a773d1acf49dc868db861a1c11",
+		},
+		{
+			pubkey:   "npub1wf4pufsucer5va8g9p0rj5dnhvfeh6d8w0g6eayaep5dhps6rsgs43dgh9",
+			expected: "726a1e261cc6474674e8285e3951b3bb139be9a773d1acf49dc868db861a1c11",
+		},
+		{
+			pubkey:   "invalid",
+			expected: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pubkey, _ := toPubkey(test.pubkey)
+			if pubkey != test.expected {
+				t.Errorf("toPubkey() expected %s, got %s", test.expected, pubkey)
+			}
+		})
+	}
+}
+
 func TestParseCSV(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -16,6 +16,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/smallset"
 	"github.com/zapstore/server/pkg/acl/vertex"
@@ -251,15 +252,18 @@ func (c *Controller) reloadAllowedPubkeys() error {
 		return err
 	}
 
-	for i, pk := range pubkeys {
-		if !nostr.IsValid32ByteHex(pk) {
-			return fmt.Errorf("invalid pubkey at line %d: %s", i+1, pk)
+	for i := range pubkeys {
+		pk, err := toPubkey(pubkeys[i])
+		if err != nil {
+			return fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
 		}
+		pubkeys[i] = pk
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.pubkeysAllowed.Clear()
 	c.pubkeysAllowed = smallset.NewFrom(pubkeys...)
 	return nil
 }
@@ -271,15 +275,18 @@ func (c *Controller) reloadBlockedPubkeys() error {
 		return err
 	}
 
-	for i, pk := range pubkeys {
-		if !nostr.IsValid32ByteHex(pk) {
-			return fmt.Errorf("invalid pubkey at line %d: %s", i+1, pk)
+	for i := range pubkeys {
+		pk, err := toPubkey(pubkeys[i])
+		if err != nil {
+			return fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
 		}
+		pubkeys[i] = pk
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.pubkeysBlocked.Clear()
 	c.pubkeysBlocked = smallset.NewFrom(pubkeys...)
 	return nil
 }
@@ -300,6 +307,7 @@ func (c *Controller) reloadBlockedEvents() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.eventsBlocked.Clear()
 	c.eventsBlocked = smallset.NewFrom(ids...)
 	return nil
 }
@@ -320,8 +328,27 @@ func (c *Controller) reloadBlockedBlobs() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.blobsBlocked.Clear()
 	c.blobsBlocked = smallset.NewFrom(hashes...)
 	return nil
+}
+
+// toPubkey tries to parse a string into a hex pubkey.
+// It supports both hex and npub formats.
+func toPubkey(pk string) (string, error) {
+	if nostr.IsValid32ByteHex(pk) {
+		return pk, nil
+	}
+
+	if strings.HasPrefix(pk, "npub1") {
+		_, data, err := nip19.Decode(pk)
+		if err != nil {
+			return "", fmt.Errorf("invalid pubkey: %w", err)
+		}
+		return data.(string), nil
+	}
+
+	return "", fmt.Errorf("invalid pubkey: %s", pk)
 }
 
 // parseCSV parses a CSV file with exactly two columns.
