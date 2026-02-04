@@ -37,7 +37,7 @@ var (
 )
 
 func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*rely.Relay, error) {
-	store, err := store.New(config.Store)
+	store, err := store.New(config.DatabasePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create store: %w", err)
 	}
@@ -73,8 +73,8 @@ func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*rely.Rela
 		VagueFilters(),
 	)
 
-	relay.On.Req = Query(store)
 	relay.On.Event = Save(store)
+	relay.On.Req = Query(store)
 	return relay, nil
 }
 
@@ -83,18 +83,20 @@ func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
+		var err error
 		switch {
 		case nostr.IsRegularKind(event.Kind):
-			_, err := store.Save(ctx, event)
-			return err
+			_, err = store.Save(ctx, event)
 
 		case nostr.IsReplaceableKind(event.Kind) || nostr.IsAddressableKind(event.Kind):
-			_, err := store.Replace(ctx, event)
-			return err
-
-		default:
-			return nil
+			_, err = store.Replace(ctx, event)
 		}
+
+		if err != nil {
+			slog.Error("relay: failed to save event", "error", err, "event", event.ID)
+			return err
+		}
+		return nil
 	}
 }
 

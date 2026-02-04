@@ -138,7 +138,7 @@ func TestAppSearchQuery(t *testing.T) {
 }
 
 func TestStoreQueryAppSearch(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -238,7 +238,7 @@ var (
 )
 
 func TestAppTagsIndexing(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestAppTagsIndexing(t *testing.T) {
 }
 
 func TestAppFTSIndexing(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestAppFTSIndexing(t *testing.T) {
 }
 
 func TestReleaseTagsIndexing(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestReleaseTagsIndexing(t *testing.T) {
 }
 
 func TestAssetTagsIndexing(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestAssetTagsIndexing(t *testing.T) {
 }
 
 func TestFileTagsIndexing(t *testing.T) {
-	store, err := New(Config{Path: ":memory:"})
+	store, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}

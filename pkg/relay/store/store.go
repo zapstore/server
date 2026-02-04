@@ -17,9 +17,9 @@ import (
 //go:embed schema.sql
 var schema string
 
-func New(c Config) (*sqlite.Store, error) {
+func New(path string) (*sqlite.Store, error) {
 	return sqlite.New(
-		c.Path,
+		path,
 		sqlite.WithQueryBuilder(queryBuilder),
 		sqlite.WithAdditionalSchema(schema),
 		sqlite.WithoutEventPolicy(),  // events have been validated by the relay

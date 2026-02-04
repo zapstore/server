@@ -8,7 +8,6 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/zapstore/server/pkg/events"
-	"github.com/zapstore/server/pkg/relay/store"
 )
 
 type Config struct {
@@ -18,6 +17,9 @@ type Config struct {
 
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
+
+	// DatabasePath is the path to the sqlite database file for storing event metadata.
+	DatabasePath string `env:"RELAY_DATABASE_PATH"`
 
 	// MaxMessageBytes is the maximum size of a message that can be sent to the relay.
 	// Default is 500_000 (0.5MB).
@@ -31,8 +33,6 @@ type Config struct {
 	// Default is all kinds.
 	AllowedKinds []int `env:"RELAY_ALLOWED_EVENT_KINDS"`
 
-	Store store.Config
-
 	Info Info
 }
 
@@ -40,6 +40,7 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		Port:            "3334",
+		DatabasePath:    "relay.db",
 		MaxMessageBytes: 500_000,
 		MaxReqFilters:   50,
 		AllowedKinds:    events.WithValidation,
@@ -65,21 +66,18 @@ func (c Config) Validate() error {
 	if c.Port == "" {
 		return errors.New("port is not set")
 	}
+	if c.DatabasePath == "" {
+		return errors.New("database path is not set")
+	}
 	if c.MaxMessageBytes <= 0 {
 		return errors.New("max message bytes must be greater than 0")
 	}
 	if c.MaxReqFilters <= 0 {
 		return errors.New("max REQ filters must be greater than 0")
 	}
-
 	if len(c.AllowedKinds) == 0 {
 		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
 	}
-
-	if err := c.Store.Validate(); err != nil {
-		return fmt.Errorf("store: %w", err)
-	}
-
 	if err := c.Info.Validate(); err != nil {
 		// info is not critical, so we log the error and continue
 		slog.Error("relay info is invalid or incomplete", "error", err)
@@ -148,11 +146,11 @@ func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
+		"\tDatabase Path: %s\n"+
 		"\tMax Message Bytes: %d\n"+
 		"\tMax REQ Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		c.Info.String()+
-		c.Store.String(),
-		c.Domain, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
+		c.Domain, c.Port, c.DatabasePath, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
 	)
 }
