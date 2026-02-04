@@ -24,7 +24,8 @@ func TestManualHotReload(t *testing.T) {
 		UnknownPubkeyPolicy: AllowAll,
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+	logger := slog.New(handler)
 
 	controller, err := New(config, logger)
 	if err != nil {
