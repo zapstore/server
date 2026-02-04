@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 
 //go:embed schema.sql
 var schema string
+
+var (
+	ErrBlobNotFound = errors.New("blob not found")
+)
 
 type Store struct {
 	DB *sql.DB
@@ -56,18 +61,24 @@ func (s *Store) Close() error {
 }
 
 // Save saves the metadata of a blob to the database.
-// If CreatedAt is zero, it defaults to the current time.
-func (s *Store) Save(ctx context.Context, b BlobMeta) error {
+// Returns true if the blob was inserted, false if it already existed.
+// If CreatedAt is zero, it defaults to the current UTC time.
+func (s *Store) Save(ctx context.Context, b BlobMeta) (inserted bool, err error) {
 	if b.CreatedAt.IsZero() {
 		b.CreatedAt = time.Now().UTC()
 	}
 
-	query := `INSERT INTO blobs (hash, type, size, created_at) VALUES (?, ?, ?, ?)`
-	_, err := s.DB.ExecContext(ctx, query, b.Hash, b.Type, b.Size, b.CreatedAt.Unix())
+	query := `INSERT OR IGNORE INTO blobs (hash, type, size, created_at) VALUES (?, ?, ?, ?)`
+	res, err := s.DB.ExecContext(ctx, query, b.Hash, b.Type, b.Size, b.CreatedAt.Unix())
 	if err != nil {
-		return fmt.Errorf("failed to save blob metadata: %w", err)
+		return false, fmt.Errorf("failed to save blob metadata: %w", err)
 	}
-	return nil
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	return n > 0, nil
 }
 
 // Query retrieves the metadata of a blob from the database.
@@ -78,6 +89,9 @@ func (s *Store) Query(ctx context.Context, hash blossom.Hash) (BlobMeta, error) 
 
 	query := `SELECT type, size, created_at FROM blobs WHERE hash = ?`
 	err := s.DB.QueryRowContext(ctx, query, hash).Scan(&mime, &size, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return BlobMeta{}, ErrBlobNotFound
+	}
 	if err != nil {
 		return BlobMeta{}, fmt.Errorf("failed to get blob metadata: %w", err)
 	}

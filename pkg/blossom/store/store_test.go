@@ -28,8 +28,22 @@ func TestSaveAndQuery(t *testing.T) {
 		CreatedAt: time.Now().UTC().Truncate(time.Second), // SQLite stores seconds only
 	}
 
-	if err := store.Save(ctx, want); err != nil {
+	// First save should insert
+	inserted, err := store.Save(ctx, want)
+	if err != nil {
 		t.Fatalf("Save failed: %v", err)
+	}
+	if !inserted {
+		t.Error("expected inserted=true for new blob")
+	}
+
+	// Second save should not insert (already exists)
+	inserted, err = store.Save(ctx, want)
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+	if inserted {
+		t.Error("expected inserted=false for existing blob")
 	}
 
 	contains, err := store.Contains(ctx, want.Hash)
