@@ -69,7 +69,7 @@ func Setup(config Config, limiter *rate.Limiter[string], acl *acl.Controller) (*
 	relay.Reject.Req.Clear()
 	relay.Reject.Req.Append(
 		RateReqIP(limiter),
-		FiltersExceed(config.MaxFilters),
+		FiltersExceed(config.MaxReqFilters),
 		VagueFilters(),
 	)
 

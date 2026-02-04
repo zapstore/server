@@ -23,9 +23,9 @@ type Config struct {
 	// Default is 500_000 (0.5MB).
 	MaxMessageBytes int64 `env:"RELAY_MAX_MESSAGE_BYTES"`
 
-	// MaxFilters is the maximum number of filters that can be applied to a connection.
+	// MaxReqFilters is the maximum number of filters for a single REQ request.
 	// Default is 50.
-	MaxFilters int `env:"RELAY_MAX_REQ_FILTERS"`
+	MaxReqFilters int `env:"RELAY_MAX_REQ_FILTERS"`
 
 	// AllowedKinds is a list of event kinds that are allowed to be published to the relay.
 	// Default is all kinds.
@@ -41,7 +41,7 @@ func NewConfig() Config {
 	return Config{
 		Port:            "3334",
 		MaxMessageBytes: 500_000,
-		MaxFilters:      50,
+		MaxReqFilters:   50,
 		AllowedKinds:    events.WithValidation,
 	}
 }
@@ -68,8 +68,8 @@ func (c Config) Validate() error {
 	if c.MaxMessageBytes <= 0 {
 		return errors.New("max message bytes must be greater than 0")
 	}
-	if c.MaxFilters <= 0 {
-		return errors.New("max filters must be greater than 0")
+	if c.MaxReqFilters <= 0 {
+		return errors.New("max REQ filters must be greater than 0")
 	}
 
 	if len(c.AllowedKinds) == 0 {
@@ -149,10 +149,10 @@ func (c Config) String() string {
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
 		"\tMax Message Bytes: %d\n"+
-		"\tMax Filters: %d\n"+
+		"\tMax REQ Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		c.Info.String()+
 		c.Store.String(),
-		c.Domain, c.Port, c.MaxMessageBytes, c.MaxFilters, c.AllowedKinds,
+		c.Domain, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
 	)
 }
