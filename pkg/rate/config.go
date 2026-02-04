@@ -6,8 +6,6 @@ package rate
 import (
 	"fmt"
 	"time"
-
-	"github.com/pippellia-btc/rate"
 )
 
 type Config struct {
@@ -31,17 +29,6 @@ func NewConfig() Config {
 		TokensPerInterval: 10,
 		Interval:          time.Second,
 	}
-}
-
-// NewLimiter creates a new rate limiter with a [rate.FlatRefiller] from the given config.
-func NewLimiter(c Config) *rate.Limiter[string] {
-	refiller := rate.FlatRefiller[string]{
-		InitialTokens:     float64(c.InitialTokens),
-		MaxTokens:         float64(c.MaxTokens),
-		TokensPerInterval: float64(c.TokensPerInterval),
-		Interval:          c.Interval,
-	}
-	return rate.NewLimiter(refiller)
 }
 
 func (c Config) Validate() error {

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/pippellia-btc/rate"
 	"github.com/pippellia-btc/rely"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/events"
+	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay/store"
 )
 
@@ -36,7 +36,7 @@ var (
 	ErrRateLimited = errors.New("rate-limited: slow down chief")
 )
 
-func Setup(config Config, limiter *rate.Limiter[string], acl *acl.Controller) (*rely.Relay, error) {
+func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*rely.Relay, error) {
 	store, err := store.New(config.Store)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create store: %w", err)
@@ -104,14 +104,14 @@ func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, filters
 	}
 }
 
-func RateConnectionIP(limiter *rate.Limiter[string]) func(_ rely.Stats, request *http.Request) error {
+func RateConnectionIP(limiter rate.Limiter) func(_ rely.Stats, request *http.Request) error {
 	return func(_ rely.Stats, request *http.Request) error {
 		cost := 1.0
 		return RateLimitIP(limiter, rely.GetIP(request), cost)
 	}
 }
 
-func RateEventIP(limiter *rate.Limiter[string]) func(client rely.Client, _ *nostr.Event) error {
+func RateEventIP(limiter rate.Limiter) func(client rely.Client, _ *nostr.Event) error {
 	return func(client rely.Client, _ *nostr.Event) error {
 		cost := 1.0
 		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
@@ -122,7 +122,7 @@ func RateEventIP(limiter *rate.Limiter[string]) func(client rely.Client, _ *nost
 	}
 }
 
-func RateReqIP(limiter *rate.Limiter[string]) func(client rely.Client, filters nostr.Filters) error {
+func RateReqIP(limiter rate.Limiter) func(client rely.Client, filters nostr.Filters) error {
 	return func(client rely.Client, filters nostr.Filters) error {
 		cost := float64(len(filters))
 		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
@@ -134,7 +134,7 @@ func RateReqIP(limiter *rate.Limiter[string]) func(client rely.Client, filters n
 }
 
 // RateLimitIP rejects an IP if it's exceeding the rate limit.
-func RateLimitIP(limiter *rate.Limiter[string], ip rely.IP, cost float64) error {
+func RateLimitIP(limiter rate.Limiter, ip rely.IP, cost float64) error {
 	reject, err := limiter.Reject(ip.Group(), cost)
 	if err != nil {
 		// fail open policy; if the rate limiter fails, we allow the request

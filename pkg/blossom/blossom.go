@@ -14,12 +14,12 @@ import (
 
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
-	"github.com/pippellia-btc/rate"
 	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom/bunny"
+	"github.com/zapstore/server/pkg/rate"
 )
 
-func Setup(config Config, limiter *rate.Limiter[string], acl *acl.Controller) (*blossy.Server, error) {
+func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Server, error) {
 	bunny, err := bunny.NewClient(config.Bunny)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup bunny client: %w", err)
@@ -158,21 +158,21 @@ func BlobIsBlocked(acl *acl.Controller) func(r blossy.Request, hints blossy.Uplo
 	}
 }
 
-func RateUploadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+func RateUploadIP(limiter rate.Limiter) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		cost := UploadCost(hints)
 		return RateLimitIP(limiter, r.IP(), cost)
 	}
 }
 
-func RateDownloadIP(limiter *rate.Limiter[string]) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+func RateDownloadIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 		cost := 10.0
 		return RateLimitIP(limiter, r.IP(), cost)
 	}
 }
 
-func RateCheckIP(limiter *rate.Limiter[string]) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
+func RateCheckIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 		cost := 1.0
 		return RateLimitIP(limiter, r.IP(), cost)
@@ -180,7 +180,7 @@ func RateCheckIP(limiter *rate.Limiter[string]) func(r blossy.Request, hash blos
 }
 
 // RateLimitIP rejects an IP if it's exceeding the rate limit.
-func RateLimitIP(limiter *rate.Limiter[string], ip blossy.IP, cost float64) *blossom.Error {
+func RateLimitIP(limiter rate.Limiter, ip blossy.IP, cost float64) *blossom.Error {
 	reject, err := limiter.Reject(ip.Group(), cost)
 	if err != nil {
 		// fail open policy; if the rate limiter fails, we allow the request
