@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 
+	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom"
 	"github.com/zapstore/server/pkg/config"
 	"github.com/zapstore/server/pkg/rate"
@@ -20,9 +22,18 @@ func main() {
 		panic(err)
 	}
 
-	limiter := rate.NewLimiter(config.Rate)
+	config.Print()
+	return
 
-	relay, err := relay.Setup(config.Relay, limiter)
+	limiter := rate.NewLimiter(config.Rate)
+	logger := slog.Default()
+
+	acl, err := acl.New(config.ACL, logger)
+	if err != nil {
+		panic(err)
+	}
+
+	relay, err := relay.Setup(config.Relay, limiter, acl)
 	if err != nil {
 		panic(err)
 	}

@@ -4,30 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip11"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/relay/store"
-	"github.com/zapstore/server/pkg/vertex"
 )
-
-type PubkeyPolicy string
-
-const (
-	// PubkeyPolicyAllow allows unknown pubkeys to publish to the relay.
-	PubkeyPolicyAllow PubkeyPolicy = "ALLOW"
-
-	// PubkeyPolicyBlock blocks unknown pubkeys from publishing to the relay.
-	PubkeyPolicyBlock PubkeyPolicy = "BLOCK"
-
-	// PubkeyPolicyVertex uses the Vertex DVM to determine whether to allow or block unknown pubkeys.
-	// It uses the Vertex configuration to determine the threshold and algorithm to use.
-	PubkeyPolicyVertex PubkeyPolicy = "VERTEX"
-)
-
-var PubkeyPolicies = []PubkeyPolicy{PubkeyPolicyAllow, PubkeyPolicyBlock, PubkeyPolicyVertex}
 
 type Config struct {
 	// Domain is the domain of the relay, used to validate NIP42 authentication.
@@ -49,23 +31,6 @@ type Config struct {
 	// Default is all kinds.
 	AllowedKinds []int `env:"RELAY_ALLOWED_EVENT_KINDS"`
 
-	// BlockedIDs is a list of event IDs that are blocked from being published to the relay.
-	// Default is empty.
-	BlockedIDs []string `env:"RELAY_BLOCKED_EVENT_IDS"`
-
-	// Allowlist is a list of pubkeys that are considered trusted and can publish to the relay.
-	Allowlist []string `env:"RELAY_PUBKEY_ALLOWLIST"`
-
-	// Blocklist is a list of pubkeys that are considered distrusted and cannot publish to the relay.
-	Blocklist []string `env:"RELAY_PUBKEY_BLOCKLIST"`
-
-	// UnknownPubkeyPolicy is the policy to apply to unknown pubkeys,
-	// which are the ones not in the allowlist or blocklist.
-	// Possible values are "allow", "block", "vertex". Default is "vertex".
-	UnknownPubkeyPolicy PubkeyPolicy `env:"RELAY_PUBKEY_UNKNOWN_POLICY"`
-
-	Vertex vertex.Config
-
 	Store store.Config
 
 	Info Info
@@ -74,12 +39,10 @@ type Config struct {
 // NewConfig create a new config with default values.
 func NewConfig() Config {
 	return Config{
-		Port:                "3334",
-		MaxMessageBytes:     500_000,
-		MaxFilters:          50,
-		AllowedKinds:        events.WithValidation,
-		UnknownPubkeyPolicy: PubkeyPolicyVertex,
-		Vertex:              vertex.NewConfig(),
+		Port:            "3334",
+		MaxMessageBytes: 500_000,
+		MaxFilters:      50,
+		AllowedKinds:    events.WithValidation,
 	}
 }
 
@@ -111,29 +74,6 @@ func (c Config) Validate() error {
 
 	if len(c.AllowedKinds) == 0 {
 		slog.Warn("relay allowed kinds is empty. No events will be accepted.")
-	}
-
-	for _, id := range c.BlockedIDs {
-		if err := events.ValidateHash(id); err != nil {
-			return fmt.Errorf("invalid blocked event ID: %w", err)
-		}
-	}
-	for i, pubkey := range c.Blocklist {
-		if !nostr.IsValid32ByteHex(pubkey) {
-			return fmt.Errorf("invalid blacklisted pubkey at index %d: %s", i, pubkey)
-		}
-	}
-	for i, pubkey := range c.Allowlist {
-		if !nostr.IsValid32ByteHex(pubkey) {
-			return fmt.Errorf("invalid whitelisted pubkey at index %d: %s", i, pubkey)
-		}
-	}
-	if !slices.Contains(PubkeyPolicies, c.UnknownPubkeyPolicy) {
-		return fmt.Errorf("unknown pubkey policy: %s. Possible values are: %v", c.UnknownPubkeyPolicy, PubkeyPolicies)
-	}
-
-	if err := c.Vertex.Validate(); err != nil {
-		return fmt.Errorf("vertex: %w", err)
 	}
 
 	if err := c.Store.Validate(); err != nil {
@@ -211,13 +151,8 @@ func (c Config) String() string {
 		"\tMax Message Bytes: %d\n"+
 		"\tMax Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
-		"\tBlocked IDs: %v\n"+
-		"\tAllowlist: %v\n"+
-		"\tBlocklist: %v\n"+
-		"\tUnknown Pubkey Policy: %s\n"+
 		c.Info.String()+
-		c.Vertex.String()+
 		c.Store.String(),
-		c.Domain, c.Port, c.MaxMessageBytes, c.MaxFilters, c.AllowedKinds, c.BlockedIDs, c.Allowlist, c.Blocklist, c.UnknownPubkeyPolicy,
+		c.Domain, c.Port, c.MaxMessageBytes, c.MaxFilters, c.AllowedKinds,
 	)
 }

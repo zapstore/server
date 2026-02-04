@@ -15,9 +15,9 @@ import (
 	"github.com/pippellia-btc/rate"
 	"github.com/pippellia-btc/rely"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
+	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/relay/store"
-	"github.com/zapstore/server/pkg/vertex"
 )
 
 var (
@@ -36,17 +36,7 @@ var (
 	ErrRateLimited = errors.New("rate-limited: slow down chief")
 )
 
-func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
-	var err error
-	vertexFilter := vertex.Filter{}
-
-	if config.UnknownPubkeyPolicy == PubkeyPolicyVertex {
-		vertexFilter, err = vertex.NewFilter(config.Vertex)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create vertex filter: %w", err)
-		}
-	}
-
+func Setup(config Config, limiter *rate.Limiter[string], acl *acl.Controller) (*rely.Relay, error) {
 	store, err := store.New(config.Store)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create store: %w", err)
@@ -68,11 +58,11 @@ func Setup(config Config, limiter *rate.Limiter[string]) (*rely.Relay, error) {
 	relay.Reject.Event.Append(
 		RateEventIP(limiter),
 		KindNotAllowed(config.AllowedKinds),
-		IDIsBlocked(config.BlockedIDs),
+		IDIsBlocked(acl),
 		rely.InvalidID,
 		rely.InvalidSignature,
 		InvalidStructure(),
-		AuthorNotTrusted(config, vertexFilter),
+		AuthorNotAllowed(acl),
 		AppAlreadyExists(store),
 	)
 
@@ -215,10 +205,10 @@ func KindNotAllowed(kinds []int) func(_ rely.Client, e *nostr.Event) error {
 	}
 }
 
-func IDIsBlocked(ids []string) func(_ rely.Client, e *nostr.Event) error {
+func IDIsBlocked(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) error {
 	return func(_ rely.Client, e *nostr.Event) error {
-		if slices.Contains(ids, e.ID) {
-			return fmt.Errorf("%w: %v", ErrEventIDBlocked, ids)
+		if acl.IsEventBlocked(e.ID) {
+			return fmt.Errorf("%w: %v", ErrEventIDBlocked, e.ID)
 		}
 		return nil
 	}
@@ -269,41 +259,17 @@ func AppAlreadyExists(store *sqlite.Store) func(_ rely.Client, e *nostr.Event) e
 	}
 }
 
-func AuthorNotTrusted(config Config, vertex vertex.Filter) func(_ rely.Client, e *nostr.Event) error {
+func AuthorNotAllowed(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) error {
 	return func(_ rely.Client, e *nostr.Event) error {
-
-		if slices.Contains(config.Blocklist, e.PubKey) {
+		allow, err := acl.AllowPubkey(context.Background(), e.PubKey)
+		if err != nil {
+			// fail open policy; if the ACL fails, we allow the event
+			slog.Error("relay: failed to check if pubkey is allowed", "error", err)
+			return nil
+		}
+		if !allow {
 			return ErrEventPubkeyBlocked
 		}
-
-		if slices.Contains(config.Allowlist, e.PubKey) {
-			return nil
-		}
-
-		switch config.UnknownPubkeyPolicy {
-		case PubkeyPolicyAllow:
-			return nil
-
-		case PubkeyPolicyBlock:
-			return ErrEventPubkeyBlocked
-
-		case PubkeyPolicyVertex:
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-
-			reject, err := vertex.Reject(ctx, e.PubKey)
-			if err != nil {
-				slog.Error("relay failed to use vertex filter", "pubkey", e.PubKey, "error", err)
-				return ErrInternal
-			}
-			if reject {
-				return ErrEventPubkeyBlocked
-			}
-			return nil
-
-		default:
-			slog.Error("relay: unknown pubkey policy", "policy", config.UnknownPubkeyPolicy)
-			return ErrInternal
-		}
+		return nil
 	}
 }

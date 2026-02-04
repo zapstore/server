@@ -1,18 +1,21 @@
 package relay
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/rate"
 )
 
 func TestRateLimiting(t *testing.T) {
 	limiter := rate.NewLimiter(rate.NewConfig())
+	acl, _ := acl.New(acl.NewConfig(), slog.Default())
 	config := NewConfig()
 
-	relay, err := Setup(config, limiter)
+	relay, err := Setup(config, limiter, acl)
 	if err != nil {
 		t.Fatalf("failed to setup relay: %v", err)
 	}

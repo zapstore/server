@@ -13,6 +13,7 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom"
 	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
@@ -20,6 +21,7 @@ import (
 
 type Config struct {
 	Rate    rate.Config
+	ACL     acl.Config
 	Relay   relay.Config
 	Blossom blossom.Config
 }
@@ -40,18 +42,22 @@ func Load() (Config, error) {
 
 func New() Config {
 	return Config{
-		Relay:   relay.NewConfig(),
 		Rate:    rate.NewConfig(),
+		ACL:     acl.NewConfig(),
+		Relay:   relay.NewConfig(),
 		Blossom: blossom.NewConfig(),
 	}
 }
 
 func (c Config) Validate() error {
-	if err := c.Relay.Validate(); err != nil {
-		return fmt.Errorf("relay: %w", err)
+	if err := c.ACL.Validate(); err != nil {
+		return fmt.Errorf("acl: %w", err)
 	}
 	if err := c.Rate.Validate(); err != nil {
 		return fmt.Errorf("rate: %w", err)
+	}
+	if err := c.Relay.Validate(); err != nil {
+		return fmt.Errorf("relay: %w", err)
 	}
 	if err := c.Blossom.Validate(); err != nil {
 		return fmt.Errorf("blossom: %w", err)
@@ -61,6 +67,7 @@ func (c Config) Validate() error {
 
 func (c Config) Print() {
 	fmt.Println(c.Rate)
+	fmt.Println(c.ACL)
 	fmt.Println(c.Relay)
 	fmt.Println(c.Blossom)
 }
