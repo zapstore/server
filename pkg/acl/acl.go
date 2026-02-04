@@ -18,7 +18,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/smallset"
-	"github.com/zapstore/server/pkg/vertex"
+	"github.com/zapstore/server/pkg/acl/vertex"
 )
 
 // Controller is an access control list that manages allowed/blocked pubkeys, ids, and blobs.

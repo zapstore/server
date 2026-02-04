@@ -9,7 +9,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/zapstore/server/pkg/vertex"
+	"github.com/zapstore/server/pkg/acl/vertex"
 )
 
 // Hardcoded file names within the ACL directory.
