@@ -32,6 +32,14 @@ func TestSaveAndQuery(t *testing.T) {
 		t.Fatalf("Save failed: %v", err)
 	}
 
+	contains, err := store.Contains(ctx, want.Hash)
+	if err != nil {
+		t.Fatalf("Contains failed: %v", err)
+	}
+	if !contains {
+		t.Fatalf("blob should exist, but doesn't")
+	}
+
 	got, err := store.Query(ctx, want.Hash)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
