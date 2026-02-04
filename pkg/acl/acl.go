@@ -1,3 +1,6 @@
+// The acl package is responsible for managing the access control list for the relay and blossom servers.
+// It supports hot-reloadable CSV files for allowed/blocked pubkeys, events, and blobs.
+// It also supports a configurable policy for unknown pubkeys (allow, block, or vertex-based reputation filtering).
 package acl
 
 import (
