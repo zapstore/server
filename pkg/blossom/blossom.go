@@ -3,6 +3,7 @@
 package blossom
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,10 +17,16 @@ import (
 	"github.com/pippellia-btc/blossy"
 	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom/bunny"
+	"github.com/zapstore/server/pkg/blossom/store"
 	"github.com/zapstore/server/pkg/rate"
 )
 
 func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Server, error) {
+	store, err := store.New(config.DatabasePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup store: %w", err)
+	}
+
 	bunny, err := bunny.NewClient(config.Bunny)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup bunny client: %w", err)
@@ -47,43 +54,78 @@ func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Se
 		BlobIsBlocked(acl),
 	)
 
-	blossom.On.Check = Check(bunny)
-	blossom.On.Download = Download(bunny)
-	blossom.On.Upload = Upload(bunny)
+	blossom.On.Check = Check(store)
+	blossom.On.Download = Download(store, bunny)
+	blossom.On.Upload = Upload(store, bunny)
 	return blossom, nil
 }
 
-func Check(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
+func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
 	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
-		if ext == "" {
-			// TODO: find the extention from the hash using the stats database
-			return nil, blossom.ErrBadRequest("extension is required")
+
+		// We can check the store for the blob metadata instead of redirecting to Bunny.
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+
+		meta, err := db.Query(ctx, hash)
+		if err != nil {
+			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
+			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+		}
+		return blossy.Found(meta.Type, meta.Size), nil
+	}
+}
+
+func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash blossom.Hash, _ string) (blossy.BlobDelivery, *blossom.Error) {
+	return func(r blossy.Request, hash blossom.Hash, _ string) (blossy.BlobDelivery, *blossom.Error) {
+
+		// In the Bunny CDN files are defined by their name (hash) and extension (ext).
+		// If the extension is not provided, or if it's different (e.g. .jpg instead of .jpeg), Bunny won't find the file.
+		// To find the correct extention, we check the store for that hash and use the type to get the extension.
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+
+		meta, err := db.Query(ctx, hash)
+		if err != nil {
+			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
+			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		path := client.CDN() + "/" + hash.Hex() + "." + ext
+		path := client.CDN() + "/" + hash.Hex() + "." + blossom.ExtFromType(meta.Type)
 		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
 	}
 }
 
-func Download(client bunny.Client) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
-	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.BlobDelivery, *blossom.Error) {
-		if ext == "" {
-			// TODO: find the extention from the hash using the stats database
-			return nil, blossom.ErrBadRequest("extension is required")
-		}
-
-		path := client.CDN() + "/" + hash.Hex() + "." + ext
-		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
-	}
-}
-
-func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 
+		// To avoid wasting bandwidth and Bunny credits,
+		// we check if the blob exists in the store before uploading it.
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		meta, err := db.Query(ctx, hints.Hash)
+		if err != nil && !errors.Is(err, store.ErrBlobNotFound) {
+			// internal error
+			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hints.Hash)
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+		}
+
+		if err == nil {
+			// blob already exists
+			return blossom.BlobDescriptor{
+				Hash:     hints.Hash,
+				Type:     meta.Type,
+				Size:     meta.Size,
+				Uploaded: meta.CreatedAt.Unix(),
+			}, nil
+		}
+
+		// upload to Bunny
 		name := hints.Hash.Hex() + "." + blossom.ExtFromType(hints.Type)
 		sha256 := hints.Hash.Hex()
 
-		if err := client.Upload(r.Context(), data, name, sha256); err != nil {
+		if err := client.Upload(ctx, data, name, sha256); err != nil {
 			if errors.Is(err, bunny.ErrChecksumMismatch) {
 				// TODO: punish the client for providing a bad hash
 				return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
@@ -92,8 +134,9 @@ func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints
 			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		mime, size, err := client.Check(r.Context(), name)
+		mime, size, err := client.Check(ctx, name)
 		if err != nil {
+			slog.Error("blossom: failed to check blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
@@ -102,6 +145,18 @@ func Upload(client bunny.Client) func(r blossy.Request, hints blossy.UploadHints
 		}
 		if mime != hints.Type {
 			// TODO: punish the client for providing a bad mime
+		}
+
+		meta = store.BlobMeta{
+			Hash:      hints.Hash,
+			Type:      mime,
+			Size:      size,
+			CreatedAt: time.Now().UTC(),
+		}
+
+		if _, err = db.Save(ctx, meta); err != nil {
+			slog.Error("blossom: failed to save blob metadata", "error", err, "hash", hints.Hash)
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
 		return blossom.BlobDescriptor{

@@ -14,6 +14,9 @@ type Config struct {
 	// Port is the port the blossom server will listen on. Default is "3335".
 	Port string `env:"BLOSSOM_PORT"`
 
+	// DatabasePath is the path to the sqlite database file for storing blob metadata.
+	DatabasePath string `env:"BLOSSOM_DATABASE_PATH"`
+
 	// AllowedContentTypes is a list of content types that are allowed to be uploaded to the blossom server.
 	// Default is "application/vnd.android.package-archive" and common image types.
 	AllowedMedia []string `env:"BLOSSOM_ALLOWED_MEDIA"`
@@ -23,7 +26,8 @@ type Config struct {
 
 func NewConfig() Config {
 	return Config{
-		Port: "3335",
+		Port:         "3335",
+		DatabasePath: "blossom.db",
 		AllowedMedia: []string{
 			"application/vnd.android.package-archive",
 			"image/jpeg",
@@ -45,6 +49,9 @@ func (c Config) Validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("port is required")
 	}
+	if c.DatabasePath == "" {
+		return fmt.Errorf("database path is required")
+	}
 
 	for _, mime := range c.AllowedMedia {
 		if mime == "" {
@@ -62,6 +69,7 @@ func (c Config) String() string {
 	return fmt.Sprintf("Blossom:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
+		"\tDatabase Path: %s\n"+
 		"\tAllowed Media: %v\n"+
-		c.Bunny.String(), c.Domain, c.Port, c.AllowedMedia)
+		c.Bunny.String(), c.Domain, c.Port, c.DatabasePath, c.AllowedMedia)
 }
