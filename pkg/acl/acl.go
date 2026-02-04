@@ -71,16 +71,16 @@ func New(c Config, log *slog.Logger) (*Controller, error) {
 		}
 	}
 
-	if err := acl.reloadAllowedPubkeys(); err != nil {
+	if _, err = acl.reloadAllowedPubkeys(); err != nil {
 		return nil, fmt.Errorf("failed to load allowed pubkeys: %w", err)
 	}
-	if err := acl.reloadBlockedPubkeys(); err != nil {
+	if _, err = acl.reloadBlockedPubkeys(); err != nil {
 		return nil, fmt.Errorf("failed to load blocked pubkeys: %w", err)
 	}
-	if err := acl.reloadBlockedEvents(); err != nil {
+	if _, err = acl.reloadBlockedEvents(); err != nil {
 		return nil, fmt.Errorf("failed to load blocked ids: %w", err)
 	}
-	if err := acl.reloadBlockedBlobs(); err != nil {
+	if _, err = acl.reloadBlockedBlobs(); err != nil {
 		return nil, fmt.Errorf("failed to load blocked blobs: %w", err)
 	}
 
@@ -213,11 +213,13 @@ func (c *Controller) watch() {
 			}
 
 			timer[file] = time.AfterFunc(delay, func() {
-				if err := c.reload(file); err != nil {
-					c.log.Error("acl: reload failed", "file", file, "error", err)
+				count, err := c.reload(file)
+				if err != nil {
+					c.log.Error("acl: reload failed, using old list", "file", file, "error", err)
 					return
 				}
-				c.log.Info("acl: reloaded", "file", file)
+
+				c.log.Info("acl: successful reload", "file", file, "items", count)
 			})
 
 		case err, ok := <-c.watcher.Errors:
@@ -230,7 +232,8 @@ func (c *Controller) watch() {
 }
 
 // reload reloads the given file.
-func (c *Controller) reload(file string) error {
+// It returns the number of entities in the new list.
+func (c *Controller) reload(file string) (int, error) {
 	switch file {
 	case PubkeysAllowedFile:
 		return c.reloadAllowedPubkeys()
@@ -241,21 +244,23 @@ func (c *Controller) reload(file string) error {
 	case BlobsBlockedFile:
 		return c.reloadBlockedBlobs()
 	default:
-		return fmt.Errorf("unknown file: %s", file)
+		return 0, fmt.Errorf("unknown file: %s", file)
 	}
 }
 
-func (c *Controller) reloadAllowedPubkeys() error {
+// reloadAllowedPubkeys reloads the allowed pubkeys list from the allowed_pubkeys.csv file.
+// It returns the number of pubkeys in the new list.
+func (c *Controller) reloadAllowedPubkeys() (int, error) {
 	path := filepath.Join(c.config.Dir, PubkeysAllowedFile)
 	pubkeys, _, err := parseCSV(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for i := range pubkeys {
 		pk, err := toPubkey(pubkeys[i])
 		if err != nil {
-			return fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
+			return 0, fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
 		}
 		pubkeys[i] = pk
 	}
@@ -265,20 +270,22 @@ func (c *Controller) reloadAllowedPubkeys() error {
 
 	c.pubkeysAllowed.Clear()
 	c.pubkeysAllowed = smallset.NewFrom(pubkeys...)
-	return nil
+	return c.pubkeysAllowed.Size(), nil
 }
 
-func (c *Controller) reloadBlockedPubkeys() error {
+// reloadBlockedPubkeys reloads the blocked pubkeys list from the blocked_pubkeys.csv file.
+// It returns the number of pubkeys in the new list.
+func (c *Controller) reloadBlockedPubkeys() (int, error) {
 	path := filepath.Join(c.config.Dir, PubkeysBlockedFile)
 	pubkeys, _, err := parseCSV(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for i := range pubkeys {
 		pk, err := toPubkey(pubkeys[i])
 		if err != nil {
-			return fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
+			return 0, fmt.Errorf("invalid pubkey at line %d: %w", i+1, err)
 		}
 		pubkeys[i] = pk
 	}
@@ -288,19 +295,21 @@ func (c *Controller) reloadBlockedPubkeys() error {
 
 	c.pubkeysBlocked.Clear()
 	c.pubkeysBlocked = smallset.NewFrom(pubkeys...)
-	return nil
+	return c.pubkeysBlocked.Size(), nil
 }
 
-func (c *Controller) reloadBlockedEvents() error {
+// reloadBlockedEvents reloads the blocked events list from the blocked_events.csv file.
+// It returns the number of events in the new list.
+func (c *Controller) reloadBlockedEvents() (int, error) {
 	path := filepath.Join(c.config.Dir, EventsBlockedFile)
 	ids, _, err := parseCSV(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for i, id := range ids {
 		if err := blossom.ValidateHash(id); err != nil {
-			return fmt.Errorf("invalid event id at line %d: %w", i+1, err)
+			return 0, fmt.Errorf("invalid event id at line %d: %w", i+1, err)
 		}
 	}
 
@@ -309,19 +318,21 @@ func (c *Controller) reloadBlockedEvents() error {
 
 	c.eventsBlocked.Clear()
 	c.eventsBlocked = smallset.NewFrom(ids...)
-	return nil
+	return c.eventsBlocked.Size(), nil
 }
 
-func (c *Controller) reloadBlockedBlobs() error {
+// reloadBlockedBlobs reloads the blocked blobs list from the blocked_blobs.csv file.
+// It returns the number of blobs in the new list.
+func (c *Controller) reloadBlockedBlobs() (int, error) {
 	path := filepath.Join(c.config.Dir, BlobsBlockedFile)
 	hashes, _, err := parseCSV(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	for i, hash := range hashes {
 		if err := blossom.ValidateHash(hash); err != nil {
-			return fmt.Errorf("invalid blob hash at line %d: %w", i+1, err)
+			return 0, fmt.Errorf("invalid blob hash at line %d: %w", i+1, err)
 		}
 	}
 
@@ -330,7 +341,7 @@ func (c *Controller) reloadBlockedBlobs() error {
 
 	c.blobsBlocked.Clear()
 	c.blobsBlocked = smallset.NewFrom(hashes...)
-	return nil
+	return c.blobsBlocked.Size(), nil
 }
 
 // toPubkey tries to parse a string into a hex pubkey.
