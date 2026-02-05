@@ -23,9 +23,9 @@ import (
 
 func Setup(
 	config Config,
-	store *store.Store,
 	limiter rate.Limiter,
 	acl *acl.Controller,
+	store *store.Store,
 ) (*blossy.Server, error) {
 
 	bunny, err := bunny.NewClient(config.Bunny)

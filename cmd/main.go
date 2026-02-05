@@ -53,12 +53,12 @@ func main() {
 	}
 	defer acl.Close()
 
-	relay, err := relay.Setup(config.Relay, rstore, limiter, acl)
+	relay, err := relay.Setup(config.Relay, limiter, acl, rstore)
 	if err != nil {
 		panic(err)
 	}
 
-	blossom, err := blossom.Setup(config.Blossom, bstore, limiter, acl)
+	blossom, err := blossom.Setup(config.Blossom, limiter, acl, bstore)
 	if err != nil {
 		panic(err)
 	}

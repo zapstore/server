@@ -37,9 +37,9 @@ var (
 
 func Setup(
 	config Config,
-	store *sqlite.Store,
 	limiter rate.Limiter,
 	acl *acl.Controller,
+	store *sqlite.Store,
 ) (*rely.Relay, error) {
 
 	relay := rely.NewRelay(
