@@ -56,7 +56,7 @@ func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Se
 
 	blossom.On.Check = Check(store)
 	blossom.On.Download = Download(store, bunny)
-	blossom.On.Upload = Upload(store, bunny)
+	blossom.On.Upload = Upload(store, bunny, limiter)
 	return blossom, nil
 }
 
@@ -102,7 +102,7 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 	}
 }
 
-func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 
 		// To avoid wasting bandwidth and Bunny credits,
@@ -131,11 +131,15 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 		name := BlobPath(hints.Hash, hints.Type)
 		sha256 := hints.Hash.Hex()
 
-		if err := client.Upload(ctx, data, name, sha256); err != nil {
-			if errors.Is(err, bunny.ErrChecksumMismatch) {
-				// TODO: punish the client for providing a bad hash
-				return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
-			}
+		err = client.Upload(ctx, data, name, sha256)
+		if errors.Is(err, bunny.ErrInvalidChecksum) {
+			// punish the client for providing a bad hash
+			cost := 20.0
+			limiter.Penalize(r.IP().Group(), cost)
+			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
+		}
+
+		if err != nil {
 			slog.Error("blossom: failed to upload blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
@@ -146,11 +150,14 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		if size != hints.Size {
-			// TODO: punish the client for providing a bad size
+		// punish the client if it provided bad hints.
+		if hints.Size < size {
+			cost := 50.0
+			limiter.Penalize(r.IP().Group(), cost)
 		}
 		if mime != hints.Type {
-			// TODO: punish the client for providing a bad mime
+			cost := 20.0
+			limiter.Penalize(r.IP().Group(), cost)
 		}
 
 		meta = store.BlobMeta{
@@ -169,7 +176,7 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 			Hash:     hints.Hash,
 			Type:     mime,
 			Size:     size,
-			Uploaded: time.Now().UTC().Unix(),
+			Uploaded: meta.CreatedAt.Unix(),
 		}, nil
 	}
 }
@@ -177,17 +184,6 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 // BlobPath returns the path to the blob on the blossom server, based on the hash and mime type.
 func BlobPath(hash blossom.Hash, mime string) string {
 	return "blobs/" + hash.Hex() + "." + blossom.ExtFromType(mime)
-}
-
-// UploadCost estimates the cost in tokens for an upload based on the clients hints.
-func UploadCost(hints blossy.UploadHints) float64 {
-	if hints.Size <= 0 {
-		// default cost is very high to punish clients that don't provide the size (-1)
-		// or provided a clearly false size of 0.
-		return 100
-	}
-	// The cost is roughly 1 token per 10 MB.
-	return float64(hints.Size) / 10_000_000
 }
 
 func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
@@ -226,29 +222,40 @@ func BlobIsBlocked(acl *acl.Controller) func(r blossy.Request, hints blossy.Uplo
 
 func RateUploadIP(limiter rate.Limiter) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-		cost := UploadCost(hints)
-		return RateLimitIP(limiter, r.IP(), cost)
+		// The default cost is 50 tokens to punish clients that don't provide the size.
+		// Otherwise, the cost is 1 token per 10 MB.
+		cost := 50.0
+		if hints.Size > 0 {
+			cost = float64(hints.Size) / 10_000_000
+		}
+
+		if !limiter.Allow(r.IP().Group(), cost) {
+			return blossom.ErrTooMany("rate-limited: slow down chief")
+		}
+		return nil
 	}
 }
 
 func RateDownloadIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 		cost := 10.0
-		return RateLimitIP(limiter, r.IP(), cost)
+		ip := r.IP().Group()
+
+		if !limiter.Allow(ip, cost) {
+			return blossom.ErrTooMany("rate-limited: slow down chief")
+		}
+		return nil
 	}
 }
 
 func RateCheckIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 	return func(r blossy.Request, hash blossom.Hash, ext string) *blossom.Error {
 		cost := 1.0
-		return RateLimitIP(limiter, r.IP(), cost)
-	}
-}
+		ip := r.IP().Group()
 
-// RateLimitIP rejects an IP if it's exceeding the rate limit.
-func RateLimitIP(limiter rate.Limiter, ip blossy.IP, cost float64) *blossom.Error {
-	if !limiter.Allow(ip.Group(), cost) {
-		return blossom.ErrTooMany("rate-limited: slow down chief")
+		if !limiter.Allow(ip, cost) {
+			return blossom.ErrTooMany("rate-limited: slow down chief")
+		}
+		return nil
 	}
-	return nil
 }
