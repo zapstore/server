@@ -137,13 +137,7 @@ func RateReqIP(limiter rate.Limiter) func(client rely.Client, filters nostr.Filt
 
 // RateLimitIP rejects an IP if it's exceeding the rate limit.
 func RateLimitIP(limiter rate.Limiter, ip rely.IP, cost float64) error {
-	reject, err := limiter.Reject(ip.Group(), cost)
-	if err != nil {
-		// fail open policy; if the rate limiter fails, we allow the request
-		slog.Error("relay: rate limiter failed", "error", err)
-		return nil
-	}
-	if reject {
+	if !limiter.Allow(ip.Group(), cost) {
 		return ErrRateLimited
 	}
 	return nil

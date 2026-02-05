@@ -11,7 +11,7 @@ require (
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/pippellia-btc/blossom v0.4.8
 	github.com/pippellia-btc/blossy v0.2.2
-	github.com/pippellia-btc/rate v0.1.0
+	github.com/pippellia-btc/rate v0.2.1
 	github.com/pippellia-btc/rely v1.2.2
 	github.com/pippellia-btc/smallset v0.4.2
 	github.com/vertex-lab/nostr-sqlite v0.3.7

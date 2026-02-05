@@ -247,13 +247,7 @@ func RateCheckIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash,
 
 // RateLimitIP rejects an IP if it's exceeding the rate limit.
 func RateLimitIP(limiter rate.Limiter, ip blossy.IP, cost float64) *blossom.Error {
-	reject, err := limiter.Reject(ip.Group(), cost)
-	if err != nil {
-		// fail open policy; if the rate limiter fails, we allow the request
-		slog.Error("blossom: rate limiter failed", "error", err)
-		return nil
-	}
-	if reject {
+	if !limiter.Allow(ip.Group(), cost) {
 		return blossom.ErrTooMany("rate-limited: slow down chief")
 	}
 	return nil
