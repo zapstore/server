@@ -109,16 +109,19 @@ func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, filters
 func RateConnectionIP(limiter rate.Limiter) func(_ rely.Stats, request *http.Request) error {
 	return func(_ rely.Stats, request *http.Request) error {
 		cost := 1.0
-		return RateLimitIP(limiter, rely.GetIP(request), cost)
+		if !limiter.Allow(rely.GetIP(request).Group(), cost) {
+			return ErrRateLimited
+		}
+		return nil
 	}
 }
 
 func RateEventIP(limiter rate.Limiter) func(client rely.Client, _ *nostr.Event) error {
 	return func(client rely.Client, _ *nostr.Event) error {
-		cost := 1.0
-		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
+		cost := 5.0
+		if !limiter.Allow(client.IP().Group(), cost) {
 			client.Disconnect()
-			return err
+			return ErrRateLimited
 		}
 		return nil
 	}
@@ -126,21 +129,17 @@ func RateEventIP(limiter rate.Limiter) func(client rely.Client, _ *nostr.Event) 
 
 func RateReqIP(limiter rate.Limiter) func(client rely.Client, filters nostr.Filters) error {
 	return func(client rely.Client, filters nostr.Filters) error {
-		cost := float64(len(filters))
-		if err := RateLimitIP(limiter, client.IP(), cost); err != nil {
+		cost := 1.0
+		if len(filters) > 10 {
+			cost = 5.0
+		}
+
+		if !limiter.Allow(client.IP().Group(), cost) {
 			client.Disconnect()
-			return err
+			return ErrRateLimited
 		}
 		return nil
 	}
-}
-
-// RateLimitIP rejects an IP if it's exceeding the rate limit.
-func RateLimitIP(limiter rate.Limiter, ip rely.IP, cost float64) error {
-	if !limiter.Allow(ip.Group(), cost) {
-		return ErrRateLimited
-	}
-	return nil
 }
 
 func FiltersExceed(n int) func(rely.Client, nostr.Filters) error {
