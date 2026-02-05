@@ -77,8 +77,8 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		Algorithm:       Algorithm{Sort: SortGlobal},
-		CacheExpiration: 1 * time.Hour,
-		CacheSize:       10_000,
+		CacheExpiration: 24 * time.Hour,
+		CacheSize:       100_000,
 	}
 }
 
