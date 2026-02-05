@@ -1,3 +1,5 @@
+// The rate package is responsible for rate limiting the relay and blossom servers.
+// It exposes a [NewLimiter] function to create a new rate limiter with the given config.
 package rate
 
 import (
