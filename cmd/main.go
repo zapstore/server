@@ -22,9 +22,6 @@ func main() {
 		panic(err)
 	}
 
-	config.Print()
-	return
-
 	limiter := rate.NewLimiter(config.Rate)
 	logger := slog.Default()
 

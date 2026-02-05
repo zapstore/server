@@ -63,11 +63,14 @@ func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Se
 func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
 	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
 
-		// We can check the store for the blob metadata instead of redirecting to Bunny.
+		// We can check the local store for the blob metadata instead of redirecting to Bunny.
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
 		defer cancel()
 
 		meta, err := db.Query(ctx, hash)
+		if errors.Is(err, store.ErrBlobNotFound) {
+			return nil, blossom.ErrNotFound("blob not found")
+		}
 		if err != nil {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
 			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
@@ -86,6 +89,9 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 		defer cancel()
 
 		meta, err := db.Query(ctx, hash)
+		if errors.Is(err, store.ErrBlobNotFound) {
+			return nil, blossom.ErrNotFound("blob not found")
+		}
 		if err != nil {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
 			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
@@ -105,12 +111,6 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 		defer cancel()
 
 		meta, err := db.Query(ctx, hints.Hash)
-		if err != nil && !errors.Is(err, store.ErrBlobNotFound) {
-			// internal error
-			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hints.Hash)
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
-		}
-
 		if err == nil {
 			// blob already exists
 			return blossom.BlobDescriptor{
@@ -119,6 +119,12 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 				Size:     meta.Size,
 				Uploaded: meta.CreatedAt.Unix(),
 			}, nil
+		}
+
+		if err != nil && !errors.Is(err, store.ErrBlobNotFound) {
+			// internal error
+			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hints.Hash)
+			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
 		// upload to Bunny
@@ -170,7 +176,7 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 
 // BlobPath returns the path to the blob on the blossom server, based on the hash and mime type.
 func BlobPath(hash blossom.Hash, mime string) string {
-	return "/blobs/" + hash.Hex() + "." + blossom.ExtFromType(mime)
+	return "blobs/" + hash.Hex() + "." + blossom.ExtFromType(mime)
 }
 
 // UploadCost estimates the cost in tokens for an upload based on the clients hints.
