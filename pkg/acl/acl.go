@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,24 +41,29 @@ type Controller struct {
 	watcher *fsnotify.Watcher
 	done    chan struct{}
 
+	dir    string
 	config Config
 }
 
-// New creates a new Controller with the given configuration.
-// It reloads all CSV files from the [Config.Dir] directory when they change, logging using the given logger.
-func New(c Config, log *slog.Logger) (*Controller, error) {
+// New creates a new Controller with the given directory and configuration.
+// If the directory or required CSV files don't exist, they are created with default headers.
+// It reloads all CSV files when they change, logging using the given logger.
+func New(c Config, dir string, log *slog.Logger) (*Controller, error) {
 	if log == nil {
 		return nil, errors.New("logger is required")
 	}
 
 	// Resolve absolute path for reliable comparison with fsnotify ids
-	absPath, err := filepath.Abs(c.Dir)
+	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve acl directory path: %w", err)
 	}
-	c.Dir = absPath
+	if err := initDir(absDir); err != nil {
+		return nil, fmt.Errorf("failed to initialize acl directory: %w", err)
+	}
 
 	acl := &Controller{
+		dir:            absDir,
 		config:         c,
 		pubkeysAllowed: smallset.New[string](100),
 		pubkeysBlocked: smallset.New[string](100),
@@ -94,13 +100,47 @@ func New(c Config, log *slog.Logger) (*Controller, error) {
 
 	// We watch the directory instead of individual files because most editors
 	// use atomic writes (write to temp file, then rename), which would cause us to lose the watcher.
-	if err := acl.watcher.Add(c.Dir); err != nil {
+	if err := acl.watcher.Add(absDir); err != nil {
 		acl.watcher.Close()
 		return nil, fmt.Errorf("failed to watch acl directory: %w", err)
 	}
 
 	go acl.watch()
 	return acl, nil
+}
+
+// fileTemplates maps each required file to its initial content (header comments).
+var fileTemplates = map[string]string{
+	PubkeysAllowedFile: "# Allowed pubkeys\n# pubkey,reason\n",
+	PubkeysBlockedFile: "# Blocked pubkeys\n# pubkey,reason\n",
+	EventsBlockedFile:  "# Blocked events\n# event_id,reason\n",
+	BlobsBlockedFile:   "# Blocked blobs\n# hash,reason\n",
+}
+
+// initDir ensures the ACL directory and required files exist.
+// Creates the directory and any missing files with default headers.
+func initDir(dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("failed to stat directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("path is not a directory: %s", dir)
+	}
+
+	for file, template := range fileTemplates {
+		path := filepath.Join(dir, file)
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			if err := os.WriteFile(path, []byte(template), 0644); err != nil {
+				return fmt.Errorf("failed to create %s: %w", file, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Close stops the file watcher and releases resources.
@@ -254,7 +294,7 @@ func (c *Controller) reload(file string) (int, error) {
 // reloadAllowedPubkeys reloads the allowed pubkeys list from the allowed_pubkeys.csv file.
 // It returns the number of pubkeys in the new list.
 func (c *Controller) reloadAllowedPubkeys() (int, error) {
-	path := filepath.Join(c.config.Dir, PubkeysAllowedFile)
+	path := filepath.Join(c.dir, PubkeysAllowedFile)
 	pubkeys, _, err := parseCSV(path)
 	if err != nil {
 		return 0, err
@@ -279,7 +319,7 @@ func (c *Controller) reloadAllowedPubkeys() (int, error) {
 // reloadBlockedPubkeys reloads the blocked pubkeys list from the blocked_pubkeys.csv file.
 // It returns the number of pubkeys in the new list.
 func (c *Controller) reloadBlockedPubkeys() (int, error) {
-	path := filepath.Join(c.config.Dir, PubkeysBlockedFile)
+	path := filepath.Join(c.dir, PubkeysBlockedFile)
 	pubkeys, _, err := parseCSV(path)
 	if err != nil {
 		return 0, err
@@ -304,7 +344,7 @@ func (c *Controller) reloadBlockedPubkeys() (int, error) {
 // reloadBlockedEvents reloads the blocked events list from the blocked_events.csv file.
 // It returns the number of events in the new list.
 func (c *Controller) reloadBlockedEvents() (int, error) {
-	path := filepath.Join(c.config.Dir, EventsBlockedFile)
+	path := filepath.Join(c.dir, EventsBlockedFile)
 	ids, _, err := parseCSV(path)
 	if err != nil {
 		return 0, err
@@ -327,7 +367,7 @@ func (c *Controller) reloadBlockedEvents() (int, error) {
 // reloadBlockedBlobs reloads the blocked blobs list from the blocked_blobs.csv file.
 // It returns the number of blobs in the new list.
 func (c *Controller) reloadBlockedBlobs() (int, error) {
-	path := filepath.Join(c.config.Dir, BlobsBlockedFile)
+	path := filepath.Join(c.dir, BlobsBlockedFile)
 	hashes, _, err := parseCSV(path)
 	if err != nil {
 		return 0, err

@@ -19,21 +19,19 @@ func TestManualHotReload(t *testing.T) {
 		t.Skip("skipping manual test in short mode")
 	}
 
-	config := Config{
-		Dir:                 "testdata",
-		UnknownPubkeyPolicy: AllowAll,
-	}
+	dir := "testdata"
+	config := Config{UnknownPubkeyPolicy: AllowAll}
 
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 	logger := slog.New(handler)
 
-	controller, err := New(config, logger)
+	controller, err := New(config, dir, logger)
 	if err != nil {
 		t.Fatalf("failed to create controller: %v", err)
 	}
 	defer controller.Close()
 
-	t.Logf("watching %s for 30 seconds...", config.Dir)
+	t.Logf("watching %s for 30 seconds...", dir)
 	t.Logf("allowed_pubkeys: %d", len(controller.AllowedPubkeys()))
 	t.Logf("blocked_pubkeys: %d", len(controller.BlockedPubkeys()))
 	t.Logf("blocked_events: %d", len(controller.BlockedEvents()))

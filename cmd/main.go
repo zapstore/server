@@ -46,7 +46,8 @@ func main() {
 	limiter := rate.NewLimiter(config.Rate)
 	logger := slog.Default()
 
-	acl, err := acl.New(config.ACL, logger)
+	aclDir := filepath.Join(config.Sys.Dir, "acl")
+	acl, err := acl.New(config.ACL, aclDir, logger)
 	if err != nil {
 		panic(err)
 	}
