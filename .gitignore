@@ -35,3 +35,6 @@ go.work.sum
 *.db
 *.db-shm
 *.db-wal
+
+# ACL files
+*.csv
