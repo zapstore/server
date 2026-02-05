@@ -25,9 +25,9 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		InitialTokens:     100,
-		MaxTokens:         100,
-		TokensPerInterval: 10,
-		Interval:          time.Second,
+		MaxTokens:         300,
+		TokensPerInterval: 100,
+		Interval:          time.Minute,
 	}
 }
 
