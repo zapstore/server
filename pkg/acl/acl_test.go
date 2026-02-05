@@ -20,6 +20,8 @@ func TestManualHotReload(t *testing.T) {
 	}
 
 	dir := "testdata"
+	defer os.RemoveAll(dir)
+
 	config := Config{UnknownPubkeyPolicy: AllowAll}
 
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
