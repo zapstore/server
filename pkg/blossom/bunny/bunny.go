@@ -46,7 +46,7 @@ func (c Client) storageURL(path string) string {
 	return fmt.Sprintf("https://%s/%s/%s",
 		c.config.StorageZone.Endpoint,
 		c.config.StorageZone.Name,
-		path,
+		strings.TrimPrefix(path, "/"),
 	)
 }
 

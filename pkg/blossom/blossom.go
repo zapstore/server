@@ -91,7 +91,7 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		path := client.CDN() + "/" + hash.Hex() + "." + blossom.ExtFromType(meta.Type)
+		path := client.CDN() + BlobPath(hash, meta.Type)
 		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
 	}
 }
@@ -122,7 +122,7 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 		}
 
 		// upload to Bunny
-		name := hints.Hash.Hex() + "." + blossom.ExtFromType(hints.Type)
+		name := BlobPath(hints.Hash, hints.Type)
 		sha256 := hints.Hash.Hex()
 
 		if err := client.Upload(ctx, data, name, sha256); err != nil {
@@ -166,6 +166,11 @@ func Upload(db *store.Store, client bunny.Client) func(r blossy.Request, hints b
 			Uploaded: time.Now().UTC().Unix(),
 		}, nil
 	}
+}
+
+// BlobPath returns the path to the blob on the blossom server, based on the hash and mime type.
+func BlobPath(hash blossom.Hash, mime string) string {
+	return "/blobs/" + hash.Hex() + "." + blossom.ExtFromType(mime)
 }
 
 // UploadCost estimates the cost in tokens for an upload based on the clients hints.
