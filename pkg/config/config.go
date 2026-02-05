@@ -20,10 +20,29 @@ import (
 )
 
 type Config struct {
+	Sys     SystemConfig
 	Rate    rate.Config
 	ACL     acl.Config
 	Relay   relay.Config
 	Blossom blossom.Config
+}
+
+type SystemConfig struct {
+	Dir string `env:"SYSTEM_DIRECTORY_PATH"`
+}
+
+func NewSystemConfig() SystemConfig {
+	return SystemConfig{
+		Dir: "", // empty string for the current directory
+	}
+}
+
+func (c SystemConfig) Validate() error { return nil }
+
+func (c SystemConfig) String() string {
+	return fmt.Sprintf("System:\n"+
+		"\tDirectory Path: %s\n",
+		c.Dir)
 }
 
 // Load creates a new [Config] with default parameters, that get overwritten by env variables when specified.
@@ -42,6 +61,7 @@ func Load() (Config, error) {
 
 func New() Config {
 	return Config{
+		Sys:     NewSystemConfig(),
 		Rate:    rate.NewConfig(),
 		ACL:     acl.NewConfig(),
 		Relay:   relay.NewConfig(),
@@ -50,6 +70,9 @@ func New() Config {
 }
 
 func (c Config) Validate() error {
+	if err := c.Sys.Validate(); err != nil {
+		return fmt.Errorf("system: %w", err)
+	}
 	if err := c.ACL.Validate(); err != nil {
 		return fmt.Errorf("acl: %w", err)
 	}
@@ -66,6 +89,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) Print() {
+	fmt.Println(c.Sys)
 	fmt.Println(c.Rate)
 	fmt.Println(c.ACL)
 	fmt.Println(c.Relay)

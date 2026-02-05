@@ -18,9 +18,6 @@ type Config struct {
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
 
-	// DatabasePath is the path to the sqlite database file for storing event metadata.
-	DatabasePath string `env:"RELAY_DATABASE_PATH"`
-
 	// MaxMessageBytes is the maximum size of a message that can be sent to the relay.
 	// Default is 500_000 (0.5MB).
 	MaxMessageBytes int64 `env:"RELAY_MAX_MESSAGE_BYTES"`
@@ -40,7 +37,6 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		Port:            "3334",
-		DatabasePath:    "relay.db",
 		MaxMessageBytes: 500_000,
 		MaxReqFilters:   50,
 		AllowedKinds:    events.WithValidation,
@@ -65,9 +61,6 @@ func (c Config) Validate() error {
 	}
 	if c.Port == "" {
 		return errors.New("port is not set")
-	}
-	if c.DatabasePath == "" {
-		return errors.New("database path is not set")
 	}
 	if c.MaxMessageBytes <= 0 {
 		return errors.New("max message bytes must be greater than 0")
@@ -146,11 +139,10 @@ func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tDomain: %s\n"+
 		"\tPort: %s\n"+
-		"\tDatabase Path: %s\n"+
 		"\tMax Message Bytes: %d\n"+
 		"\tMax REQ Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		c.Info.String()+
-		c.Domain, c.Port, c.DatabasePath, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
+		c.Domain, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
 	)
 }

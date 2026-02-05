@@ -21,11 +21,12 @@ import (
 	"github.com/zapstore/server/pkg/rate"
 )
 
-func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*blossy.Server, error) {
-	store, err := store.New(config.DatabasePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup store: %w", err)
-	}
+func Setup(
+	config Config,
+	store *store.Store,
+	limiter rate.Limiter,
+	acl *acl.Controller,
+) (*blossy.Server, error) {
 
 	bunny, err := bunny.NewClient(config.Bunny)
 	if err != nil {

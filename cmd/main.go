@@ -5,12 +5,16 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sync"
 
 	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/blossom"
+	blossomstore "github.com/zapstore/server/pkg/blossom/store"
 	"github.com/zapstore/server/pkg/config"
 	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
+	relaystore "github.com/zapstore/server/pkg/relay/store"
 )
 
 func main() {
@@ -22,6 +26,23 @@ func main() {
 		panic(err)
 	}
 
+	dataDir := filepath.Join(config.Sys.Dir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		panic(err)
+	}
+
+	rstore, err := relaystore.New(filepath.Join(dataDir, "relay.db"))
+	if err != nil {
+		panic(err)
+	}
+	defer rstore.Close()
+
+	bstore, err := blossomstore.New(filepath.Join(dataDir, "blossom.db"))
+	if err != nil {
+		panic(err)
+	}
+	defer bstore.Close()
+
 	limiter := rate.NewLimiter(config.Rate)
 	logger := slog.Default()
 
@@ -29,20 +50,24 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer acl.Close()
 
-	relay, err := relay.Setup(config.Relay, limiter, acl)
+	relay, err := relay.Setup(config.Relay, rstore, limiter, acl)
 	if err != nil {
 		panic(err)
 	}
 
-	blossom, err := blossom.Setup(config.Blossom, limiter, acl)
+	blossom, err := blossom.Setup(config.Blossom, bstore, limiter, acl)
 	if err != nil {
 		panic(err)
 	}
 
 	exit := make(chan error, 2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
+		defer wg.Done()
 		address := "localhost:" + config.Relay.Port
 		if err := relay.StartAndServe(ctx, address); err != nil {
 			exit <- err
@@ -50,6 +75,7 @@ func main() {
 	}()
 
 	go func() {
+		defer wg.Done()
 		address := "localhost:" + config.Blossom.Port
 		if err := blossom.StartAndServe(ctx, address); err != nil {
 			exit <- err
@@ -58,6 +84,7 @@ func main() {
 
 	select {
 	case <-ctx.Done():
+		wg.Wait()
 		return
 
 	case err := <-exit:

@@ -17,7 +17,6 @@ import (
 	"github.com/zapstore/server/pkg/acl"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/rate"
-	"github.com/zapstore/server/pkg/relay/store"
 )
 
 var (
@@ -36,11 +35,12 @@ var (
 	ErrRateLimited = errors.New("rate-limited: slow down chief")
 )
 
-func Setup(config Config, limiter rate.Limiter, acl *acl.Controller) (*rely.Relay, error) {
-	store, err := store.New(config.DatabasePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create store: %w", err)
-	}
+func Setup(
+	config Config,
+	store *sqlite.Store,
+	limiter rate.Limiter,
+	acl *acl.Controller,
+) (*rely.Relay, error) {
 
 	relay := rely.NewRelay(
 		rely.WithDomain(config.Domain),
