@@ -27,7 +27,7 @@ func NewLimiter(c Config) Limiter {
 	}
 }
 
-func (l Limiter) InitialTokens() int      { return l.config.InitialTokens }
-func (l Limiter) MaxTokens() int          { return l.config.MaxTokens }
-func (l Limiter) TokensPerInterval() int  { return l.config.TokensPerInterval }
-func (l Limiter) Interval() time.Duration { return l.config.Interval }
+func (l Limiter) InitialTokens() float64     { return float64(l.config.InitialTokens) }
+func (l Limiter) MaxTokens() float64         { return float64(l.config.MaxTokens) }
+func (l Limiter) TokensPerInterval() float64 { return float64(l.config.TokensPerInterval) }
+func (l Limiter) Interval() time.Duration    { return l.config.Interval }
