@@ -15,9 +15,9 @@ import (
 // =========================== TESTS ============================
 // The tests require a .env file with the following variables:
 // - BUNNY_STORAGE_ZONE_NAME
-// - BUNNY_STORAGE_ZONE_ENDPOINT
+// - BUNNY_STORAGE_ZONE_HOSTNAME
 // - BUNNY_STORAGE_ZONE_PASSWORD
-// - BUNNY_CDN_URL
+// - BUNNY_CDN_HOSTNAME
 //
 // Configure these by checking your Bunny dashboard.
 //
@@ -32,6 +32,10 @@ var (
 func init() {
 	if err := env.Parse(&config); err != nil {
 		panic(fmt.Errorf("failed to parse config: %w", err))
+	}
+
+	if err := config.Validate(); err != nil {
+		panic(fmt.Errorf("failed to validate config: %w", err))
 	}
 }
 
@@ -225,6 +229,79 @@ func TestDelete(t *testing.T) {
 			err = client.Delete(ctx, test.path)
 			if !errors.Is(err, test.err) {
 				t.Fatalf("expected error %v, got %v", test.err, err)
+			}
+		})
+	}
+}
+
+func TestValidateHostname(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+		isValid  bool
+	}{
+		{
+			name:     "empty hostname",
+			hostname: "",
+			isValid:  false,
+		},
+		{
+			name:     "hostname with https scheme",
+			hostname: "https://example.com",
+			isValid:  false,
+		},
+		{
+			name:     "hostname with http scheme",
+			hostname: "http://example.com",
+			isValid:  false,
+		},
+		{
+			name:     "hostname with ftp scheme",
+			hostname: "ftp://example.com",
+			isValid:  false,
+		},
+		{
+			name:     "hsotname with / prefix",
+			hostname: "/example.com",
+			isValid:  false,
+		},
+		{
+			name:     "hsotname with / suffix	",
+			hostname: "example.com/",
+			isValid:  false,
+		},
+		{
+			name:     "valid hostname",
+			hostname: "example.com",
+			isValid:  true,
+		},
+		{
+			name:     "valid hostname with subdomain",
+			hostname: "storage.bunnycdn.com",
+			isValid:  true,
+		},
+		{
+			name:     "valid hostname with port",
+			hostname: "example.com:8080",
+			isValid:  true,
+		},
+		{
+			name:     "valid hostname with path",
+			hostname: "example.com/path/to/resource",
+			isValid:  true,
+		},
+		{
+			name:     "valid hostname with subdomain and path",
+			hostname: "cdn.example.com/bucket",
+			isValid:  true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateHostname(test.hostname)
+			if (err == nil) != test.isValid {
+				t.Errorf("ValidateHostname(%q) error = %v, isValid %v", test.hostname, err, test.isValid)
 			}
 		})
 	}

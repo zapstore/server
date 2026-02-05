@@ -91,7 +91,7 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		path := client.CDN() + BlobPath(hash, meta.Type)
+		path := client.CDNURL(BlobPath(hash, meta.Type))
 		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
 	}
 }

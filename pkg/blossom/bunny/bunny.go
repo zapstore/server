@@ -36,23 +36,23 @@ func NewClient(c Config) (Client, error) {
 	return client, nil
 }
 
-// CDN returns the CDN endpoint.
-func (c Client) CDN() string {
-	return c.config.CDN
-}
+// StorageURL returns the request URL for the provided path on the storage zone.
+func (c Client) StorageURL(path string) string {
+	path = strings.TrimPrefix(path, "/")
+	path = strings.TrimSuffix(path, "/")
 
-// storageURL returns the request URL for the provided path.
-func (c Client) storageURL(path string) string {
 	return fmt.Sprintf("https://%s/%s/%s",
-		c.config.StorageZone.Endpoint,
+		c.config.StorageZone.Hostname,
 		c.config.StorageZone.Name,
 		strings.TrimPrefix(path, "/"),
 	)
 }
 
-// cdnURL returns the request URL for the provided path on the CDN.
-func (c Client) cdnURL(path string) string {
-	return fmt.Sprintf("%s/%s", c.config.CDN, path)
+// CDNURL returns the request URL for the provided path on the CDN.
+func (c Client) CDNURL(path string) string {
+	path = strings.TrimPrefix(path, "/")
+	path = strings.TrimSuffix(path, "/")
+	return fmt.Sprintf("https://%s/%s", c.config.CDN, path)
 }
 
 // Download the file at the specified path.
@@ -64,7 +64,7 @@ func (c Client) Download(ctx context.Context, path string) (io.ReadCloser, error
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodGet, c.storageURL(path), nil,
+		ctx, http.MethodGet, c.StorageURL(path), nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -95,7 +95,7 @@ func (c Client) Check(ctx context.Context, path string) (mime string, size int64
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodHead, c.cdnURL(path), nil,
+		ctx, http.MethodHead, c.CDNURL(path), nil,
 	)
 
 	if err != nil {
@@ -143,7 +143,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodPut, c.storageURL(path), data,
+		ctx, http.MethodPut, c.StorageURL(path), data,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -185,7 +185,7 @@ func (c Client) Delete(ctx context.Context, path string) error {
 	}
 
 	req, err := http.NewRequestWithContext(
-		ctx, http.MethodDelete, c.storageURL(path), nil,
+		ctx, http.MethodDelete, c.StorageURL(path), nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
