@@ -221,12 +221,12 @@ func AuthorNotAllowed(acl *acl.Controller) func(r blossy.Request, hints blossy.U
 
 		allow, err := acl.AllowPubkey(ctx, r.Pubkey())
 		if err != nil {
-			// fail open policy; if the ACL fails, we allow the event
+			// fail close policy;
 			slog.Error("blossom: failed to check if pubkey is allowed", "error", err)
-			return nil
+			return blossom.ErrForbidden("authenticated pubkey is not allowed. Please contact the Zapstore team")
 		}
 		if !allow {
-			return blossom.ErrForbidden("authenticated pubkey is not allowed")
+			return blossom.ErrForbidden("authenticated pubkey is not allowed. Please contact the Zapstore team")
 		}
 		return nil
 	}

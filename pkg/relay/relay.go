@@ -22,7 +22,7 @@ import (
 var (
 	ErrEventKindNotAllowed = errors.New("event kind is not in the allowed list")
 	ErrEventIDBlocked      = errors.New("event ID is blocked")
-	ErrEventPubkeyBlocked  = errors.New("event pubkey has not enough reputation. Please contact the Zapstore team.")
+	ErrEventPubkeyBlocked  = errors.New("event pubkey is not allowed. Please contact the Zapstore team.")
 
 	ErrAppAlreadyExists = errors.New(`failed to publish app: another pubkey has already published an app with the same 'd' tag identifier.
 		This is a precautionary measure because Android doesn't allow apps with the same identifier to be installed side by side.
@@ -256,11 +256,14 @@ func AppAlreadyExists(store *sqlite.Store) func(_ rely.Client, e *nostr.Event) e
 
 func AuthorNotAllowed(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) error {
 	return func(_ rely.Client, e *nostr.Event) error {
-		allow, err := acl.AllowPubkey(context.Background(), e.PubKey)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		allow, err := acl.AllowPubkey(ctx, e.PubKey)
 		if err != nil {
-			// fail open policy; if the ACL fails, we allow the event
+			// fail closed policy;
 			slog.Error("relay: failed to check if pubkey is allowed", "error", err)
-			return nil
+			return ErrEventPubkeyBlocked
 		}
 		if !allow {
 			return ErrEventPubkeyBlocked
