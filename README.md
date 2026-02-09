@@ -59,8 +59,8 @@ git clone https://github.com/zapstore/server.git
 cd server
 
 # Create and configure .env file
-cp .env.example .env
-# Edit .env with your configuration
+cp cmd/.env.example cmd/.env
+# Edit cmd/.env with your configuration
 
 # Build
 go build --tags "fts5" -o zapstore-server ./cmd
