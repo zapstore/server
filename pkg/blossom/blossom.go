@@ -118,8 +118,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 
 		// To avoid wasting bandwidth and Bunny credits,
 		// we check if the blob exists in the store before uploading it.
-		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-		defer cancel()
+		ctx := r.Context()
 
 		meta, err := db.Query(ctx, *hints.Hash)
 		if err == nil {
