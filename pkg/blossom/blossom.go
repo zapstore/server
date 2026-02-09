@@ -21,6 +21,13 @@ import (
 	"github.com/zapstore/server/pkg/rate"
 )
 
+var (
+	ErrNotFound    = blossom.ErrNotFound("blob not found")
+	ErrInternal    = blossom.ErrInternal("internal error, please contact the Zapstore team.")
+	ErrNotAllowed  = blossom.ErrForbidden("authenticated pubkey is not allowed. Please contact the Zapstore team")
+	ErrRateLimited = blossom.ErrTooMany("rate-limited: slow down chief")
+)
+
 func Setup(
 	config Config,
 	limiter rate.Limiter,
@@ -73,11 +80,11 @@ func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string
 
 		meta, err := db.Query(ctx, hash)
 		if errors.Is(err, store.ErrBlobNotFound) {
-			return nil, blossom.ErrNotFound("blob not found")
+			return nil, ErrNotFound
 		}
 		if err != nil {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
-			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return nil, ErrInternal
 		}
 		return blossy.Found(meta.Type, meta.Size), nil
 	}
@@ -94,11 +101,11 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 
 		meta, err := db.Query(ctx, hash)
 		if errors.Is(err, store.ErrBlobNotFound) {
-			return nil, blossom.ErrNotFound("blob not found")
+			return nil, ErrNotFound
 		}
 		if err != nil {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
-			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return nil, ErrInternal
 		}
 
 		url := client.CDNURL(BlobPath(hash, meta.Type))
@@ -128,7 +135,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 		if err != nil && !errors.Is(err, store.ErrBlobNotFound) {
 			// internal error
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hints.Hash)
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
 		// upload to Bunny
@@ -145,13 +152,13 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 
 		if err != nil {
 			slog.Error("blossom: failed to upload blob", "error", err, "name", name)
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
 		mime, size, err := client.Check(ctx, name)
 		if err != nil {
 			slog.Error("blossom: failed to check blob", "error", err, "name", name)
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
 		// punish the client if it provided bad hints.
@@ -173,7 +180,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 
 		if _, err = db.Save(ctx, meta); err != nil {
 			slog.Error("blossom: failed to save blob metadata", "error", err, "hash", hints.Hash)
-			return blossom.BlobDescriptor{}, blossom.ErrInternal("internal error, please contact the Zapstore team.")
+			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
 		return blossom.BlobDescriptor{
@@ -223,10 +230,10 @@ func AuthorNotAllowed(acl *acl.Controller) func(r blossy.Request, hints blossy.U
 		if err != nil {
 			// fail close policy;
 			slog.Error("blossom: failed to check if pubkey is allowed", "error", err)
-			return blossom.ErrForbidden("authenticated pubkey is not allowed. Please contact the Zapstore team")
+			return ErrNotAllowed
 		}
 		if !allow {
-			return blossom.ErrForbidden("authenticated pubkey is not allowed. Please contact the Zapstore team")
+			return ErrNotAllowed
 		}
 		return nil
 	}
@@ -261,7 +268,7 @@ func RateUploadIP(limiter rate.Limiter) func(r blossy.Request, hints blossy.Uplo
 		}
 
 		if !limiter.Allow(r.IP().Group(), cost) {
-			return blossom.ErrTooMany("rate-limited: slow down chief")
+			return ErrRateLimited
 		}
 		return nil
 	}
@@ -273,7 +280,7 @@ func RateDownloadIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Ha
 		ip := r.IP().Group()
 
 		if !limiter.Allow(ip, cost) {
-			return blossom.ErrTooMany("rate-limited: slow down chief")
+			return ErrRateLimited
 		}
 		return nil
 	}
@@ -285,7 +292,7 @@ func RateCheckIP(limiter rate.Limiter) func(r blossy.Request, hash blossom.Hash,
 		ip := r.IP().Group()
 
 		if !limiter.Allow(ip, cost) {
-			return blossom.ErrTooMany("rate-limited: slow down chief")
+			return ErrRateLimited
 		}
 		return nil
 	}
