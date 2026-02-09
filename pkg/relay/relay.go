@@ -43,7 +43,7 @@ func Setup(
 ) (*rely.Relay, error) {
 
 	relay := rely.NewRelay(
-		rely.WithDomain(config.Domain),
+		rely.WithDomain(config.Hostname),
 		rely.WithInfo(config.Info.NIP11()),
 		rely.WithMaxMessageSize(config.MaxMessageBytes),
 	)
@@ -233,9 +233,9 @@ func AppAlreadyExists(store *sqlite.Store) func(_ rely.Client, e *nostr.Event) e
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 
-		query := `SELECT COUNT(e.id) 
+		query := `SELECT COUNT(e.id)
 					FROM events AS e JOIN tags AS t ON t.event_id = e.id
-					WHERE e.kind = ? 
+					WHERE e.kind = ?
 					AND e.pubkey != ?
 					AND t.key = 'd' AND t.value = ?`
 		args := []any{events.KindApp, e.PubKey, appID}

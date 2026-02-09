@@ -11,9 +11,9 @@ import (
 )
 
 type Config struct {
-	// Domain is the domain of the relay, used to validate NIP42 authentication.
+	// Hostname is the hostname of the relay, used to validate NIP42 authentication.
 	// Default is "".
-	Domain string `env:"RELAY_DOMAIN"`
+	Hostname string `env:"RELAY_HOSTNAME"`
 
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
@@ -56,8 +56,8 @@ type Info struct {
 }
 
 func (c Config) Validate() error {
-	if c.Domain == "" {
-		return errors.New("domain is not set")
+	if c.Hostname == "" {
+		return errors.New("hostname is not set")
 	}
 	if c.Port == "" {
 		return errors.New("port is not set")
@@ -137,12 +137,12 @@ func (i Info) String() string {
 
 func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
-		"\tDomain: %s\n"+
+		"\tHostname: %s\n"+
 		"\tPort: %s\n"+
 		"\tMax Message Bytes: %d\n"+
 		"\tMax REQ Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		c.Info.String()+
-		c.Domain, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
+		c.Hostname, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
 	)
 }
