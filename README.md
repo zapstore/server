@@ -5,15 +5,15 @@ A Nostr relay and Blossom server for the Zapstore app ecosystem.
 ## Features
 
 ### Nostr Relay
-- Full Nostr relay implementation using [rely](https://github.com/pippellia-btc/rely)
-- NIP-11 relay information document
-- NIP-42 authentication support
+- Full [Nostr](https://github.com/nostr-protocol/nostr) relay implementation using [rely](https://github.com/pippellia-btc/rely)
+- [NIP-11](https://github.com/nostr-protocol/nips/blob/master/11.md) relay information document
+- [NIP-42](https://github.com/nostr-protocol/nips/blob/master/42.md) authentication support
 - Configurable allowed event kinds with structure validation
-- SQLite-based event storage
 - Filter specificity scoring to reject overly vague queries
+- SQLite-based event storage
 
 ### Blossom Server
-- [Blossom](https://github.com/hzrd149/blossom) protocol implementation for blob storage
+- Full [Blossom](https://github.com/hzrd149/blossom) server implementation using [blossy](https://github.com/pippellia-btc/blossy)
 - [Bunny CDN](https://bunny.net/) integration for scalable blob delivery
 - Configurable allowed media types (APKs, images)
 - Deduplication: blobs are checked before upload to save bandwidth
@@ -50,6 +50,7 @@ A Nostr relay and Blossom server for the Zapstore app ecosystem.
 
 - Go 1.25 or later
 - A BunnyCDN account with a storage zone configured
+- A Nostr secret key loaded with Vertex DVM credits
 
 ### Build and Run
 
