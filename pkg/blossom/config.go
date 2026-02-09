@@ -7,9 +7,9 @@ import (
 )
 
 type Config struct {
-	// Domain is the domain of the blossom server, used to validate authorization
+	// Hostname is the hostname of the blossom server, used to validate authorization
 	// events and for the "url" field in blob descriptors.
-	Domain string `env:"BLOSSOM_DOMAIN"`
+	Hostname string `env:"BLOSSOM_HOSTNAME"`
 
 	// Port is the port the blossom server will listen on. Default is "3335".
 	Port string `env:"BLOSSOM_PORT"`
@@ -39,8 +39,8 @@ func NewConfig() Config {
 }
 
 func (c Config) Validate() error {
-	if c.Domain == "" {
-		return fmt.Errorf("domain is required")
+	if c.Hostname == "" {
+		return fmt.Errorf("hostname is required")
 	}
 	if c.Port == "" {
 		return fmt.Errorf("port is required")
@@ -60,8 +60,8 @@ func (c Config) Validate() error {
 
 func (c Config) String() string {
 	return fmt.Sprintf("Blossom:\n"+
-		"\tDomain: %s\n"+
+		"\tHostname: %s\n"+
 		"\tPort: %s\n"+
 		"\tAllowed Media: %v\n"+
-		c.Bunny.String(), c.Domain, c.Port, c.AllowedMedia)
+		c.Bunny.String(), c.Hostname, c.Port, c.AllowedMedia)
 }

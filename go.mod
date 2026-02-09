@@ -9,8 +9,8 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/nbd-wtf/go-nostr v0.52.0
-	github.com/pippellia-btc/blossom v0.4.8
-	github.com/pippellia-btc/blossy v0.2.2
+	github.com/pippellia-btc/blossom v0.5.1
+	github.com/pippellia-btc/blossy v0.3.0
 	github.com/pippellia-btc/rate v0.2.1
 	github.com/pippellia-btc/rely v1.2.2
 	github.com/pippellia-btc/smallset v0.4.2

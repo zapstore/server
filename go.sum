@@ -109,10 +109,10 @@ github.com/onsi/gomega v1.4.1/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5
 github.com/onsi/gomega v1.4.3/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
 github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
-github.com/pippellia-btc/blossom v0.4.8 h1:dyD3Y06ajxthQ7cG6brpqhfB/8AIw77QkThwMv8BTxs=
-github.com/pippellia-btc/blossom v0.4.8/go.mod h1:0FK415GivYBfOJambaAhg1FZkDB5cep/skpP01hfAnc=
-github.com/pippellia-btc/blossy v0.2.2 h1:76nCvER9ISAHRR5VjVpZimPbAtuvf+0ijgzI8ex6XOg=
-github.com/pippellia-btc/blossy v0.2.2/go.mod h1:m6mfr3PEGBTkpIURdKsG+Ig7QrGw+iz2eVAEV+p67H8=
+github.com/pippellia-btc/blossom v0.5.1 h1:TQ+3VYQOL5AF/QK2OCn3nshKj1GUAlA2MngYzqRwuU0=
+github.com/pippellia-btc/blossom v0.5.1/go.mod h1:0FK415GivYBfOJambaAhg1FZkDB5cep/skpP01hfAnc=
+github.com/pippellia-btc/blossy v0.3.0 h1:JFn4z94z5KrrnOvEGssAFUZzt13+2JNbBB9NNISTHzA=
+github.com/pippellia-btc/blossy v0.3.0/go.mod h1:tt4TtdefDyGLqWF3bHOpjzRLy70PSUOc42POTlxGBeA=
 github.com/pippellia-btc/rate v0.2.1 h1:ti4HBMhqKToaniEn6DlDFrQRYQJomUI85fOpiXJqtgE=
 github.com/pippellia-btc/rate v0.2.1/go.mod h1:A2YLgBc99FDcu5HbJcjbAMszlUKJCIVlmQA2mHLA5a0=
 github.com/pippellia-btc/rely v1.2.2 h1:qKytSNHKxtlxjEDhtRBm9aLvzYC4a+a9PTqJ677ZTVs=

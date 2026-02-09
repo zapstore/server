@@ -34,7 +34,8 @@ func Setup(
 	}
 
 	blossom, err := blossy.NewServer(
-		blossy.WithBaseURL("https://" + config.Domain),
+		blossy.WithHostname(config.Hostname),
+		blossy.WithRangeSupport(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup blossom server: %w", err)
@@ -111,11 +112,11 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
 
-		meta, err := db.Query(ctx, hints.Hash)
+		meta, err := db.Query(ctx, *hints.Hash)
 		if err == nil {
 			// blob already exists
 			return blossom.BlobDescriptor{
-				Hash:     hints.Hash,
+				Hash:     *hints.Hash,
 				Type:     meta.Type,
 				Size:     meta.Size,
 				Uploaded: meta.CreatedAt.Unix(),
@@ -129,7 +130,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 		}
 
 		// upload to Bunny
-		name := BlobPath(hints.Hash, hints.Type)
+		name := BlobPath(*hints.Hash, hints.Type)
 		sha256 := hints.Hash.Hex()
 
 		err = client.Upload(ctx, data, name, sha256)
@@ -162,7 +163,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 		}
 
 		meta = store.BlobMeta{
-			Hash:      hints.Hash,
+			Hash:      *hints.Hash,
 			Type:      mime,
 			Size:      size,
 			CreatedAt: time.Now().UTC(),
@@ -174,7 +175,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 		}
 
 		return blossom.BlobDescriptor{
-			Hash:     hints.Hash,
+			Hash:     *hints.Hash,
 			Type:     mime,
 			Size:     size,
 			Uploaded: meta.CreatedAt.Unix(),
@@ -189,7 +190,7 @@ func BlobPath(hash blossom.Hash, mime string) string {
 
 func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-		if hints.Hash.Hex() == "" {
+		if hints.Hash == nil {
 			return blossom.ErrBadRequest("'Content-Digest' header is required")
 		}
 		if hints.Type == "" {
@@ -214,7 +215,7 @@ func MediaNotAllowed(allowed []string) func(r blossy.Request, hints blossy.Uploa
 
 func BlobIsBlocked(acl *acl.Controller) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
-		if acl.IsBlobBlocked(hints.Hash) {
+		if hints.Hash != nil && acl.IsBlobBlocked(*hints.Hash) {
 			return blossom.ErrForbidden("this blob is blocked")
 		}
 		return nil
