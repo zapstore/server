@@ -38,3 +38,9 @@ go.work.sum
 
 # ACL files
 *.csv
+
+# Build output
+build/
+
+# SQL dumps
+*.sql
