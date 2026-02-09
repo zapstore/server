@@ -61,16 +61,16 @@ func (a Algorithm) Validate() error {
 }
 
 type Config struct {
-	// The algorithm to use to decide whether to allow a pubkey not in the whitelist or blacklist.
+	// The algorithm to use to decide whether to allow a pubkey.
 	Algorithm Algorithm
 
 	// The secret key to use for signing requests to the Vertex DVM.
 	SecretKey string `env:"VERTEX_SECRET_KEY"`
 
-	// CacheExpiration time for ranks in the cache. Default is 1 hour.
+	// CacheExpiration time for ranks in the cache. Default is 24 hours.
 	CacheExpiration time.Duration `env:"VERTEX_CACHE_EXPIRATION"`
 
-	// CacheSize is the maximum number of entries in the cache. Default is 10_000.
+	// CacheSize is the maximum number of entries in the cache. Default is 100_000.
 	CacheSize int `env:"VERTEX_CACHE_SIZE"`
 }
 
