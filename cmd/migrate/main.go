@@ -386,8 +386,18 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 	log.Printf("  failed:    %d", stats.failed)
 }
 
-// extractBlobHashes queries the relay DB for all unique sha256 hashes
-// referenced in cdn.zapstore.dev URLs or "x" tags within events.
+// extractBlobHashes queries the relay DB for blob hashes that belong to the
+// latest release of each app, plus any cdn.zapstore.dev URLs referenced in
+// app events (icons, images). This avoids syncing blobs for every historical
+// release, which would be far too many.
+//
+// The logic:
+//  1. For each App event (kind 32267), collect cdn.zapstore.dev hashes from
+//     tags (icon, image, etc.) and note the app identifier (d tag).
+//  2. For each app identifier, find the latest Release (kind 30063) by
+//     matching the release's "i" tag and taking the most recent created_at.
+//  3. From that release, collect the "e" tags (file/asset event IDs).
+//  4. Look up those events (kind 1063 or 3063) and extract the "x" tag hash.
 func extractBlobHashes(db *sql.DB) ([]string, error) {
 	seen := make(map[string]bool)
 	var hashes []string
@@ -406,31 +416,17 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 		hashes = append(hashes, hashHex)
 	}
 
-	// Try the indexed tags table first (available after relay migration).
-	rows, err := db.Query(`SELECT DISTINCT value FROM tags WHERE value LIKE ?`, oldCDN+"%")
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var url string
-			if err := rows.Scan(&url); err != nil {
-				continue
-			}
-			addHash(strings.TrimPrefix(url, oldCDN))
-		}
-	}
-
-	// Scan event tags JSON directly. This catches:
-	// - cdn.zapstore.dev URLs in tags not covered by indexing (icon, image, etc.)
-	// - bare hashes in "x" tags (file/asset sha256)
-	evRows, err := db.Query(`SELECT tags FROM events`)
+	// --- Step 1: App events (kind 32267) ---
+	// Collect app identifiers and cdn.zapstore.dev hashes from icon/image tags.
+	appRows, err := db.Query(`SELECT tags FROM events WHERE kind = 32267`)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query events for blob URLs: %w", err)
+		return nil, fmt.Errorf("failed to query app events: %w", err)
 	}
-	defer evRows.Close()
 
-	for evRows.Next() {
+	var appIDs []string
+	for appRows.Next() {
 		var tagsRaw []byte
-		if err := evRows.Scan(&tagsRaw); err != nil {
+		if err := appRows.Scan(&tagsRaw); err != nil {
 			continue
 		}
 
@@ -444,13 +440,11 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 				continue
 			}
 
-			// "x" tags contain the bare sha256 hash of the blob.
-			if tag[0] == "x" {
-				addHash(tag[1])
-				continue
+			if tag[0] == "d" {
+				appIDs = append(appIDs, tag[1])
 			}
 
-			// All other tags: look for cdn.zapstore.dev URLs.
+			// Collect cdn.zapstore.dev hashes from any tag value (icon, image, etc.)
 			for _, val := range tag[1:] {
 				if strings.HasPrefix(val, oldCDN) {
 					addHash(strings.TrimPrefix(val, oldCDN))
@@ -458,6 +452,84 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 			}
 		}
 	}
+	appRows.Close()
 
-	return hashes, evRows.Err()
+	log.Printf("found %d apps, %d app icon/image hashes", len(appIDs), len(hashes))
+
+	// --- Step 2+3: For each app, find latest release and collect asset event IDs ---
+	var assetEventIDs []string
+
+	latestReleaseStmt, err := db.Prepare(`
+		SELECT e.tags
+		FROM events e
+		JOIN tags t ON t.event_id = e.id AND t.key = 'i'
+		WHERE e.kind = 30063 AND t.value = ?
+		ORDER BY e.created_at DESC
+		LIMIT 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare latest release query: %w", err)
+	}
+	defer latestReleaseStmt.Close()
+
+	for _, appID := range appIDs {
+		var tagsRaw []byte
+		err := latestReleaseStmt.QueryRow(appID).Scan(&tagsRaw)
+		if err == sql.ErrNoRows {
+			continue // app has no releases
+		}
+		if err != nil {
+			log.Printf("warning: failed to query latest release for app %s: %v", appID, err)
+			continue
+		}
+
+		var tags nostr.Tags
+		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
+			log.Printf("warning: failed to parse release tags for app %s: %v", appID, err)
+			continue
+		}
+
+		for _, tag := range tags {
+			if len(tag) >= 2 && tag[0] == "e" {
+				assetEventIDs = append(assetEventIDs, tag[1])
+			}
+		}
+	}
+
+	log.Printf("found %d asset/file event IDs from latest releases", len(assetEventIDs))
+
+	// --- Step 4: Look up asset/file events and extract x tag hashes ---
+	assetStmt, err := db.Prepare(`SELECT tags FROM events WHERE id = ? AND kind IN (1063, 3063)`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare asset query: %w", err)
+	}
+	defer assetStmt.Close()
+
+	for _, eventID := range assetEventIDs {
+		var tagsRaw []byte
+		err := assetStmt.QueryRow(eventID).Scan(&tagsRaw)
+		if err == sql.ErrNoRows {
+			log.Printf("warning: asset/file event %s not found", eventID)
+			continue
+		}
+		if err != nil {
+			log.Printf("warning: failed to query asset event %s: %v", eventID, err)
+			continue
+		}
+
+		var tags nostr.Tags
+		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
+			log.Printf("warning: failed to parse asset tags for event %s: %v", eventID, err)
+			continue
+		}
+
+		for _, tag := range tags {
+			if len(tag) >= 2 && tag[0] == "x" {
+				addHash(tag[1])
+				break // only one x tag per event
+			}
+		}
+	}
+
+	return hashes, nil
 }
