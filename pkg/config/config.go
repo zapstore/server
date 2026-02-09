@@ -40,9 +40,14 @@ func NewSystemConfig() SystemConfig {
 func (c SystemConfig) Validate() error { return nil }
 
 func (c SystemConfig) String() string {
+	dir := c.Dir
+	if dir == "" {
+		dir = "[current directory]"
+	}
+
 	return fmt.Sprintf("System:\n"+
 		"\tDirectory Path: %s\n",
-		c.Dir)
+		dir)
 }
 
 // Load creates a new [Config] with default parameters, that get overwritten by env variables when specified.

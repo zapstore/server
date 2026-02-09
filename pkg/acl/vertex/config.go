@@ -105,9 +105,9 @@ func (c Config) Validate() error {
 
 func (c Config) String() string {
 	return fmt.Sprintf("Vertex:\n"+
-		"\tSecretKey: %s\n"+
-		"\tCacheExpiration: %v\n"+
-		"\tCacheSize: %d\n"+
+		"\tSecret Key: %s\n"+
+		"\tCache Expiration: %v\n"+
+		"\tCache Size: %d\n"+
 		"\tAlgorithm:\n"+
 		"\t\tSource: %s\n"+
 		"\t\tSort: %s\n"+

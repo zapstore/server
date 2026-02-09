@@ -142,7 +142,7 @@ func (c Config) String() string {
 		"\tMax Message Bytes: %d\n"+
 		"\tMax REQ Filters: %d\n"+
 		"\tAllowed Kinds: %v\n"+
-		c.Info.String()+
+		c.Info.String(),
 		c.Hostname, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.AllowedKinds,
 	)
 }

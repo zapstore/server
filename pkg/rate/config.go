@@ -55,9 +55,9 @@ func (c Config) Validate() error {
 
 func (c Config) String() string {
 	return fmt.Sprintf("Rate Limiter:\n"+
-		"\tInitialTokens: %d\n"+
-		"\tMaxTokens: %d\n"+
-		"\tTokensPerInterval: %d\n"+
+		"\tInitial Tokens: %d\n"+
+		"\tMax Tokens: %d\n"+
+		"\tTokens Per Interval: %d\n"+
 		"\tInterval: %v",
 		c.InitialTokens, c.MaxTokens, c.TokensPerInterval, c.Interval)
 }
