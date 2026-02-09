@@ -103,7 +103,3 @@ Files are hot-reloaded when modified - no server restart required.
 
 - **Relay**: `ws://localhost:3334` (or your configured port)
 - **Blossom**: `http://localhost:3335` (or your configured port)
-
-## License
-
-MIT
