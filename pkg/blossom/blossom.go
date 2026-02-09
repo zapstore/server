@@ -51,9 +51,11 @@ func Setup(
 
 	blossom.Reject.Upload.Append(
 		RateUploadIP(limiter),
+		MissingAuth(),
 		MissingHints(),
-		MediaNotAllowed(config.AllowedMedia),
 		BlobIsBlocked(acl),
+		MediaNotAllowed(config.AllowedMedia),
+		AuthorNotAllowed(acl),
 	)
 
 	blossom.On.Check = Check(store)
@@ -99,8 +101,8 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 			return nil, blossom.ErrInternal("internal error, please contact the Zapstore team.")
 		}
 
-		path := client.CDNURL(BlobPath(hash, meta.Type))
-		return blossy.Redirect(path, http.StatusTemporaryRedirect), nil
+		url := client.CDNURL(BlobPath(hash, meta.Type))
+		return blossy.Redirect(url, http.StatusTemporaryRedirect), nil
 	}
 }
 
@@ -188,6 +190,15 @@ func BlobPath(hash blossom.Hash, mime string) string {
 	return "blobs/" + hash.Hex() + "." + blossom.ExtFromType(mime)
 }
 
+func MissingAuth() func(r blossy.Request, _ blossy.UploadHints) *blossom.Error {
+	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+		if !r.IsAuthed() {
+			return blossom.ErrUnauthorized("authentication is required")
+		}
+		return nil
+	}
+}
+
 func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 	return func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
 		if hints.Hash == nil {
@@ -198,6 +209,24 @@ func MissingHints() func(r blossy.Request, hints blossy.UploadHints) *blossom.Er
 		}
 		if hints.Size == -1 {
 			return blossom.ErrBadRequest("'Content-Length' header is required")
+		}
+		return nil
+	}
+}
+
+func AuthorNotAllowed(acl *acl.Controller) func(r blossy.Request, hints blossy.UploadHints) *blossom.Error {
+	return func(r blossy.Request, _ blossy.UploadHints) *blossom.Error {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		allow, err := acl.AllowPubkey(ctx, r.Pubkey())
+		if err != nil {
+			// fail open policy; if the ACL fails, we allow the event
+			slog.Error("blossom: failed to check if pubkey is allowed", "error", err)
+			return nil
+		}
+		if !allow {
+			return blossom.ErrForbidden("authenticated pubkey is not allowed")
 		}
 		return nil
 	}

@@ -175,13 +175,11 @@ func (c *Controller) AllowPubkey(ctx context.Context, pubkey string) (bool, erro
 	case UseVertex:
 		allow, err := c.vertex.Allow(ctx, pubkey)
 		if err != nil {
-			c.log.Error("acl: failed to verify reputation with vertex", "pubkey", pubkey, "error", err)
 			return false, fmt.Errorf("failed to verify reputation: %w", err)
 		}
 		return allow, nil
 
 	default:
-		c.log.Error("acl: unknown pubkey policy", "policy", c.config.UnknownPubkeyPolicy)
 		return false, fmt.Errorf("internal error: unknown pubkey policy: %s", c.config.UnknownPubkeyPolicy)
 	}
 }
