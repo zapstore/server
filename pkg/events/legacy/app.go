@@ -2,7 +2,6 @@ package legacy
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -52,11 +51,7 @@ func (app App) Validate(pubkey string) error {
 	if len(app.Platforms) == 0 {
 		return fmt.Errorf("missing 'f' tag (platform identifier)")
 	}
-	for i, p := range app.Platforms {
-		if !slices.Contains(PlatformIdentifiers, p) {
-			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
-		}
-	}
+	// Platform identifier validation removed for legacy migration compatibility
 
 	if app.Release == "" {
 		return fmt.Errorf("missing 'a' tag")

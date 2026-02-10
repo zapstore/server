@@ -70,11 +70,7 @@ func (f File) Validate() error {
 	if len(f.Platforms) == 0 {
 		return fmt.Errorf("missing 'f' tags")
 	}
-	for i, p := range f.Platforms {
-		if !slices.Contains(PlatformIdentifiers, p) {
-			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
-		}
-	}
+	// Platform identifier validation removed for legacy migration compatibility
 
 	if f.APKSignatureHash == "" {
 		return fmt.Errorf("missing 'apk_signature_hash' tag")
