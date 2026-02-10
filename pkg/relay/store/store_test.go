@@ -113,6 +113,40 @@ func TestAppSearchQuery(t *testing.T) {
 				Args: []any{"\"signal\"", "t", "productivity", "tools", 25},
 			},
 		},
+		{
+			name: "search with limit exceeding max",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "signal",
+				Limit:  500,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ?
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", 100},
+			},
+		},
+		{
+			name: "search with zero limit defaults to max",
+			filter: nostr.Filter{
+				Kinds:  []int{events.KindApp},
+				Search: "signal",
+				Limit:  0,
+			},
+			want: sqlite.Query{
+				SQL: `SELECT e.id, e.pubkey, e.created_at, e.kind, e.tags, e.content, e.sig
+		FROM events e
+		JOIN apps_fts fts ON e.id = fts.id
+		WHERE apps_fts MATCH ?
+		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
+		LIMIT ?`,
+				Args: []any{"\"signal\"", 100},
+			},
+		},
 	}
 
 	for _, tt := range tests {

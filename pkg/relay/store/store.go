@@ -17,6 +17,8 @@ import (
 //go:embed schema.sql
 var schema string
 
+const maxLimit = 100
+
 func New(path string) (*sqlite.Store, error) {
 	return sqlite.New(
 		path,
@@ -30,6 +32,13 @@ func New(path string) (*sqlite.Store, error) {
 // queryBuilder handles FTS search for apps when there's exactly one app search filter.
 // Otherwise, it delegates to the default query builder.
 func queryBuilder(filters ...nostr.Filter) ([]sqlite.Query, error) {
+	// Enforce max limit on all filters
+	for i := range filters {
+		if filters[i].Limit == 0 || filters[i].Limit > maxLimit {
+			filters[i].Limit = maxLimit
+		}
+	}
+
 	if searchesIn(filters) == 0 {
 		return sqlite.DefaultQueryBuilder(filters...)
 	}
@@ -76,7 +85,11 @@ func appSearchQuery(filter nostr.Filter) ([]sqlite.Query, error) {
 		ORDER BY bm25(apps_fts, 0, 20, 5, 1)
 		LIMIT ?`
 
-	args = append(args, filter.Limit)
+	limit := filter.Limit
+	if limit == 0 || limit > maxLimit {
+		limit = maxLimit
+	}
+	args = append(args, limit)
 	return []sqlite.Query{{SQL: query, Args: args}}, nil
 }
 
