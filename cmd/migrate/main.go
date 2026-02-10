@@ -58,10 +58,11 @@ func main() {
 	envFile := flag.String("env", "cmd/.env", "path to .env file with Bunny credentials")
 	skipInvalid := flag.Bool("skip-invalid", false, "skip events with invalid ID/signature instead of aborting")
 	dryRun := flag.Bool("dry-run", false, "validate without writing anything")
+	blossomFromOld := flag.Bool("blossom-from-old", false, "phase 2: extract blob hashes from the old DB (-from) instead of the relay DB; use when relay DB is missing events")
 	flag.Parse()
 
 	if *from == "" || *relayDB == "" || *blossomDB == "" {
-		fmt.Fprintf(os.Stderr, "Usage: migrate -from <old.db> -relay-db <new-relay.db> -blossom-db <new-blossom.db> [-env <.env>] [-skip-invalid] [-dry-run]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: migrate -from <old.db> -relay-db <new-relay.db> -blossom-db <new-blossom.db> [-env <.env>] [-skip-invalid] [-dry-run] [-blossom-from-old]\n\n")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -95,10 +96,13 @@ func main() {
 	migrateRelay(oldDB, *relayDB, *skipInvalid, *dryRun)
 
 	// Phase 2: Blossom
-	// In dry-run mode the new relay DB doesn't exist, so extract hashes from the old DB.
+	// Extract hashes from relay DB, or from old DB if -blossom-from-old or dry-run.
 	blobSource := *relayDB
-	if *dryRun {
+	if *dryRun || *blossomFromOld {
 		blobSource = *from
+		if *blossomFromOld {
+			log.Println("phase 2 will extract blob hashes from old DB (-blossom-from-old)")
+		}
 	}
 	log.Println("")
 	log.Println("═══ Phase 2: Blossom migration ═══")
@@ -334,6 +338,7 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 
 		if resp.StatusCode == http.StatusNotFound {
 			resp.Body.Close()
+			log.Printf("not on old CDN (404): %s", hashHex)
 			stats.notFound++
 			continue
 		}
@@ -477,12 +482,14 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 	// --- Step 2+3: For each app, find latest release and collect asset event IDs ---
 	var assetEventIDs []string
 
+	// Use json_each on events.tags so we don't depend on a tags table (old backup DB may not have one).
 	// New-format releases have an "i" tag with the app identifier.
 	latestReleaseStmt, err := db.Prepare(`
 		SELECT e.tags
-		FROM events e
-		JOIN tags t ON t.event_id = e.id AND t.key = 'i'
-		WHERE e.kind = 30063 AND t.value = ?
+		FROM events e, json_each(e.tags) AS j
+		WHERE e.kind = 30063
+		  AND json_extract(j.value, '$[0]') = 'i'
+		  AND json_extract(j.value, '$[1]') = ?
 		ORDER BY e.created_at DESC
 		LIMIT 1
 	`)
@@ -491,8 +498,7 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 	}
 	defer latestReleaseStmt.Close()
 
-	// Legacy releases don't have an "i" tag; instead, the "d" tag is "appID@version".
-	// Read from events.tags JSON so we don't rely on the tags table indexing "d".
+	// Legacy releases don't have an "i" tag; the "d" tag is "appID@version".
 	legacyReleaseStmt, err := db.Prepare(`
 		SELECT e.tags
 		FROM events e, json_each(e.tags) AS j
