@@ -44,7 +44,12 @@ import (
 	relayStore "github.com/zapstore/server/pkg/relay/store"
 )
 
-const oldCDN = "https://cdn.zapstore.dev/"
+const (
+	// cdnPattern is the URL prefix found in event tags (icon, image, url, etc.).
+	cdnPattern = "https://cdn.zapstore.dev/"
+	// downloadCDN is the base URL to actually download blobs from (the pre-migration CDN).
+	downloadCDN = "https://bcdn.zapstore.dev/"
+)
 
 func main() {
 	from := flag.String("from", "", "path to old relay SQLite database (read-only)")
@@ -320,7 +325,7 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 		}
 
 		// Download from old CDN.
-		resp, err := httpClient.Get(oldCDN + hashHex)
+		resp, err := httpClient.Get(downloadCDN + hashHex)
 		if err != nil {
 			log.Printf("[%d/%d] %s: download error: %v", i+1, len(hashes), hashHex, err)
 			stats.failed++
@@ -407,7 +412,8 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 //  1. For each App event (kind 32267), collect cdn.zapstore.dev hashes from
 //     tags (icon, image, etc.) and note the app identifier (d tag).
 //  2. For each app identifier, find the latest Release (kind 30063) by
-//     matching the release's "i" tag and taking the most recent created_at.
+//     matching the release's "i" tag (new format) or "d" tag prefix (legacy
+//     format), and taking the most recent created_at.
 //  3. From that release, collect the "e" tags (file/asset event IDs).
 //  4. Look up those events (kind 1063 or 3063) and extract the "x" tag hash.
 func extractBlobHashes(db *sql.DB) ([]string, error) {
@@ -458,8 +464,8 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 
 			// Collect cdn.zapstore.dev hashes from any tag value (icon, image, etc.)
 			for _, val := range tag[1:] {
-				if strings.HasPrefix(val, oldCDN) {
-					addHash(strings.TrimPrefix(val, oldCDN))
+				if strings.HasPrefix(val, cdnPattern) {
+					addHash(strings.TrimPrefix(val, cdnPattern))
 				}
 			}
 		}
@@ -471,6 +477,7 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 	// --- Step 2+3: For each app, find latest release and collect asset event IDs ---
 	var assetEventIDs []string
 
+	// New-format releases have an "i" tag with the app identifier.
 	latestReleaseStmt, err := db.Prepare(`
 		SELECT e.tags
 		FROM events e
@@ -484,11 +491,30 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 	}
 	defer latestReleaseStmt.Close()
 
+	// Legacy releases don't have an "i" tag; instead, the "d" tag is "appID@version".
+	// The "d" tag is indexed by the base schema for addressable kinds (30000-39999).
+	legacyReleaseStmt, err := db.Prepare(`
+		SELECT e.tags
+		FROM events e
+		JOIN tags t ON t.event_id = e.id AND t.key = 'd'
+		WHERE e.kind = 30063 AND t.value LIKE ?
+		ORDER BY e.created_at DESC
+		LIMIT 1
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare legacy release query: %w", err)
+	}
+	defer legacyReleaseStmt.Close()
+
 	for _, appID := range appIDs {
 		var tagsRaw []byte
 		err := latestReleaseStmt.QueryRow(appID).Scan(&tagsRaw)
 		if err == sql.ErrNoRows {
-			continue // app has no releases
+			// Fallback: try legacy release format (d tag = "appID@version").
+			err = legacyReleaseStmt.QueryRow(appID + "@%").Scan(&tagsRaw)
+		}
+		if err == sql.ErrNoRows {
+			continue // app has no releases in either format
 		}
 		if err != nil {
 			log.Printf("warning: failed to query latest release for app %s: %v", appID, err)
