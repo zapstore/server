@@ -408,10 +408,20 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 	log.Printf("  failed:    %d", stats.failed)
 }
 
-// extractBlobHashes collects all blob hashes that need to be migrated:
-//  1. cdn.zapstore.dev URLs from any tag value in any event.
-//  2. "x" tag hashes from all kind 1063 (File) and 3063 (Asset) events.
+// extractBlobHashes collects blob hashes from LATEST releases only:
+//  1. Get all App events (kind 32267) - these are replaceable, so only latest per app
+//  2. Extract CDN URLs from app events (icons, images, etc.)
+//  3. Follow the 'a' tag to find the referenced Release event (kind 30063)
+//  4. Follow the 'e' tag(s) from the release to find File events (kind 1063/3063)
+//  5. Extract the 'x' tag (blob hash) from those file events
 func extractBlobHashes(db *sql.DB) ([]string, error) {
+	type eventInfo struct {
+		PubKey    string
+		CreatedAt int64
+		Kind      int
+		Tags      nostr.Tags
+	}
+
 	seen := make(map[string]bool)
 	var hashes []string
 
@@ -429,16 +439,106 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 		hashes = append(hashes, hashHex)
 	}
 
-	// --- Step 1: Collect cdn.zapstore.dev hashes from ALL events ---
-	allRows, err := db.Query(`SELECT tags FROM events`)
+	// Build a map of all events by ID for quick lookup.
+	eventMap := make(map[string]eventInfo)
+	allRows, err := db.Query(`SELECT id, pubkey, created_at, kind, tags FROM events`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
 	}
-
-	var cdnCount int
 	for allRows.Next() {
+		var id, pubkey string
+		var createdAt int64
+		var kind int
 		var tagsRaw []byte
-		if err := allRows.Scan(&tagsRaw); err != nil {
+		if err := allRows.Scan(&id, &pubkey, &createdAt, &kind, &tagsRaw); err != nil {
+			continue
+		}
+		var tags nostr.Tags
+		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
+			continue
+		}
+		eventMap[id] = eventInfo{
+			PubKey:    pubkey,
+			CreatedAt: createdAt,
+			Kind:      kind,
+			Tags:      tags,
+		}
+	}
+	allRows.Close()
+	log.Printf("loaded %d events into memory", len(eventMap))
+
+	// Build a map of Release events by their 'd' tag for quick lookup
+	// Key: "30063:<pubkey>:<d-tag>" -> event ID
+	releaseMap := make(map[string]string)
+	// Track latest release IDs by app key as fallback when app->release linkage is missing.
+	// Key is usually release 'a' tag ("32267:<pubkey>:<app-id>"), with legacy fallback
+	// to "<pubkey>:<app-id>" parsed from 'd' tag "<app-id>@<version>".
+	latestReleaseByAppKey := make(map[string]string)
+	findTag := func(tags nostr.Tags, key string) string {
+		for _, t := range tags {
+			if len(t) >= 2 && t[0] == key {
+				return t[1]
+			}
+		}
+		return ""
+	}
+	releaseRows, err := db.Query(`SELECT id, pubkey, tags FROM events WHERE kind = 30063`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query release events: %w", err)
+	}
+	for releaseRows.Next() {
+		var id, pubkey string
+		var tagsRaw []byte
+		if err := releaseRows.Scan(&id, &pubkey, &tagsRaw); err != nil {
+			continue
+		}
+		var tags nostr.Tags
+		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
+			continue
+		}
+		for _, tag := range tags {
+			if len(tag) >= 2 && tag[0] == "d" {
+				key := fmt.Sprintf("30063:%s:%s", pubkey, tag[1])
+				releaseMap[key] = id
+				break
+			}
+		}
+
+		// Track the latest release per app key for fallback extraction.
+		appKey := findTag(tags, "a")
+		if appKey == "" {
+			d := findTag(tags, "d")
+			if i := strings.LastIndex(d, "@"); i > 0 {
+				appKey = pubkey + ":" + d[:i]
+			}
+		}
+		if appKey != "" {
+			current, ok := latestReleaseByAppKey[appKey]
+			if !ok {
+				latestReleaseByAppKey[appKey] = id
+			} else if cur, curOK := eventMap[current]; !curOK {
+				latestReleaseByAppKey[appKey] = id
+			} else if next, nextOK := eventMap[id]; nextOK && next.CreatedAt > cur.CreatedAt {
+				latestReleaseByAppKey[appKey] = id
+			}
+		}
+	}
+	releaseRows.Close()
+	log.Printf("indexed %d release events", len(releaseMap))
+
+	// --- Step 1: Process all App events (kind 32267) ---
+	appRows, err := db.Query(`SELECT id, tags FROM events WHERE kind = 32267`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query app events: %w", err)
+	}
+
+	selectedReleaseIDs := make(map[string]bool)
+	releaseKeyFromLatestApps := make(map[string]bool)
+	var appCount int
+	for appRows.Next() {
+		var appID string
+		var tagsRaw []byte
+		if err := appRows.Scan(&appID, &tagsRaw); err != nil {
 			continue
 		}
 
@@ -446,8 +546,77 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
 			continue
 		}
+		appCount++
 
+		var releaseRef string
 		for _, tag := range tags {
+			// Find the 'a' tag pointing to the release
+			if len(tag) >= 2 && tag[0] == "a" {
+				releaseRef = tag[1]
+			}
+		}
+
+		if releaseRef == "" {
+			continue
+		}
+
+		// Find the release event
+		releaseID, ok := releaseMap[releaseRef]
+		if !ok {
+			continue
+		}
+		releaseKeyFromLatestApps[releaseRef] = true
+		selectedReleaseIDs[releaseID] = true
+	}
+	appRows.Close()
+
+	// Fallback: if app linkage is incomplete in the source DB, still include latest
+	// releases discovered directly from kind 30063 events.
+	var fallbackReleaseCount int
+	for appKey, releaseID := range latestReleaseByAppKey {
+		if releaseKeyFromLatestApps[appKey] {
+			continue
+		}
+		if !selectedReleaseIDs[releaseID] {
+			selectedReleaseIDs[releaseID] = true
+			fallbackReleaseCount++
+		}
+	}
+
+	var cdnCount, fileCount, selectedReleaseCount int
+	for releaseID := range selectedReleaseIDs {
+		releaseInfo, ok := eventMap[releaseID]
+		if !ok {
+			continue
+		}
+		releaseTags := releaseInfo.Tags
+		selectedReleaseCount++
+
+		// Extract CDN URLs from latest app event that references this release.
+		// This keeps app assets (icons, images) in the migrated blob set.
+		for _, ev := range eventMap {
+			if ev.Kind != 32267 {
+				continue
+			}
+			if findTag(ev.Tags, "a") != fmt.Sprintf("30063:%s:%s", releaseInfo.PubKey, findTag(releaseTags, "d")) {
+				continue
+			}
+			for _, tag := range ev.Tags {
+				for _, val := range tag[1:] {
+					if strings.HasPrefix(val, cdnPattern) {
+						before := len(hashes)
+						addHash(strings.TrimPrefix(val, cdnPattern))
+						if len(hashes) > before {
+							cdnCount++
+						}
+					}
+				}
+			}
+			break
+		}
+
+		// Extract CDN URLs from release event
+		for _, tag := range releaseTags {
 			for _, val := range tag[1:] {
 				if strings.HasPrefix(val, cdnPattern) {
 					before := len(hashes)
@@ -458,43 +627,50 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 				}
 			}
 		}
-	}
-	allRows.Close()
 
-	log.Printf("found %d cdn URL hashes from all events", cdnCount)
-
-	// --- Step 2: Collect x tag hashes from ALL kind 1063/3063 events ---
-	assetRows, err := db.Query(`SELECT tags FROM events WHERE kind IN (1063, 3063)`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query asset/file events: %w", err)
-	}
-
-	var xCount int
-	for assetRows.Next() {
-		var tagsRaw []byte
-		if err := assetRows.Scan(&tagsRaw); err != nil {
-			continue
-		}
-
-		var tags nostr.Tags
-		if err := json.Unmarshal(tagsRaw, &tags); err != nil {
-			continue
-		}
-
-		for _, tag := range tags {
-			if len(tag) >= 2 && tag[0] == "x" {
-				before := len(hashes)
-				addHash(tag[1])
-				if len(hashes) > before {
-					xCount++
+		// Find file events referenced by 'e' tags in the release
+		for _, tag := range releaseTags {
+			if len(tag) >= 2 && tag[0] == "e" {
+				fileEventID := tag[1]
+				fileInfo, ok := eventMap[fileEventID]
+				if !ok {
+					continue
 				}
-				break
+				fileTags := fileInfo.Tags
+
+				// Extract CDN URLs from file event
+				for _, ftag := range fileTags {
+					for _, val := range ftag[1:] {
+						if strings.HasPrefix(val, cdnPattern) {
+							before := len(hashes)
+							addHash(strings.TrimPrefix(val, cdnPattern))
+							if len(hashes) > before {
+								cdnCount++
+							}
+						}
+					}
+				}
+
+				// Extract 'x' tag (blob hash) from file event
+				for _, ftag := range fileTags {
+					if len(ftag) >= 2 && ftag[0] == "x" {
+						before := len(hashes)
+						addHash(ftag[1])
+						if len(hashes) > before {
+							fileCount++
+						}
+						break
+					}
+				}
 			}
 		}
 	}
-	assetRows.Close()
 
-	log.Printf("found %d x hashes from kind 1063/3063 events", xCount)
+	log.Printf("processed %d app events", appCount)
+	log.Printf("selected %d latest release events (%d via app chain, %d via fallback)",
+		selectedReleaseCount, selectedReleaseCount-fallbackReleaseCount, fallbackReleaseCount)
+	log.Printf("found %d cdn URL hashes from latest releases", cdnCount)
+	log.Printf("found %d file hashes (x tags) from latest releases", fileCount)
 
 	return hashes, nil
 }
