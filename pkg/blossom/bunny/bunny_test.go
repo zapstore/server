@@ -286,14 +286,24 @@ func TestValidateHostname(t *testing.T) {
 			isValid:  true,
 		},
 		{
-			name:     "valid hostname with path",
+			name:     "invalid hostname with path",
 			hostname: "example.com/path/to/resource",
-			isValid:  true,
+			isValid:  false,
 		},
 		{
-			name:     "valid hostname with subdomain and path",
+			name:     "invalid hostname with query",
+			hostname: "example.com?x=1",
+			isValid:  false,
+		},
+		{
+			name:     "invalid hostname with fragment",
+			hostname: "example.com#frag",
+			isValid:  false,
+		},
+		{
+			name:     "invalid hostname with subdomain and path",
 			hostname: "cdn.example.com/bucket",
-			isValid:  true,
+			isValid:  false,
 		},
 	}
 
