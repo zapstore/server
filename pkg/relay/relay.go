@@ -70,7 +70,7 @@ func Setup(
 	relay.Reject.Req.Append(
 		RateReqIP(limiter),
 		FiltersExceed(config.MaxReqFilters),
-		VagueFilters(),
+		// VagueFilters(),
 	)
 
 	relay.On.Event = Save(store)
