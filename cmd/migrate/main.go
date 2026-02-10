@@ -40,6 +40,7 @@ import (
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	blossomBunny "github.com/zapstore/server/pkg/blossom/bunny"
 	blossomStore "github.com/zapstore/server/pkg/blossom/store"
+	"github.com/zapstore/server/pkg/events"
 	relayStore "github.com/zapstore/server/pkg/relay/store"
 )
 
@@ -128,7 +129,7 @@ func migrateRelay(oldDB *sql.DB, relayDBPath string, skipInvalid, dryRun bool) {
 
 	ctx := context.Background()
 	var stats struct {
-		total, saved, existed, skipped, invalidID, invalidSig, saveErr int
+		total, saved, existed, skipped, invalidID, invalidSig, invalidStruct, saveErr int
 	}
 
 	for rows.Next() {
@@ -172,6 +173,17 @@ func migrateRelay(oldDB *sql.DB, relayDBPath string, skipInvalid, dryRun bool) {
 			if skipInvalid {
 				log.Printf("%s — skipping", msg)
 				stats.invalidSig++
+				continue
+			}
+			log.Fatalf("%s — aborting (use -skip-invalid to continue)", msg)
+		}
+
+		// Verify event structure
+		if err := events.Validate(&ev); err != nil {
+			msg := fmt.Sprintf("[%d/%d] %s kind=%d: invalid event structure (err=%v)", stats.total, totalCount, ev.ID, ev.Kind, err)
+			if skipInvalid {
+				log.Printf("%s — skipping", msg)
+				stats.invalidStruct++
 				continue
 			}
 			log.Fatalf("%s — aborting (use -skip-invalid to continue)", msg)
