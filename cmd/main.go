@@ -26,9 +26,6 @@ func main() {
 		panic(err)
 	}
 
-	config.Print()
-	return
-
 	dataDir := filepath.Join(config.Sys.Dir, "data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		panic(err)
