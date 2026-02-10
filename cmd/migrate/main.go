@@ -365,7 +365,7 @@ func migrateBlossom(relayDBPath, blossomDBPath string, bunnyConfig blossomBunny.
 
 		// If Content-Length was missing (-1), do a HEAD to get the actual size.
 		if size <= 0 {
-			mime, size, err = bunny.Check(ctx, blobPath)
+			_, size, err = bunny.Check(ctx, blobPath)
 			if err != nil {
 				log.Printf("[%d/%d] %s: bunny check error after upload: %v", i+1, len(hashes), hashHex, err)
 				stats.failed++
