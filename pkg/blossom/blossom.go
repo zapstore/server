@@ -180,7 +180,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTim
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
-		mime, size, err := client.Check(ctx, name)
+		_, size, err := client.Check(ctx, name)
 		if err != nil {
 			slog.Error("blossom: failed to check blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, ErrInternal
@@ -191,14 +191,10 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTim
 			cost := 100.0
 			limiter.Penalize(r.IP().Group(), cost)
 		}
-		if mime != hints.Type {
-			cost := 50.0
-			limiter.Penalize(r.IP().Group(), cost)
-		}
 
 		meta = store.BlobMeta{
 			Hash:      *hints.Hash,
-			Type:      mime,
+			Type:      hints.Type,
 			Size:      size,
 			CreatedAt: time.Now().UTC(),
 		}
@@ -210,7 +206,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTim
 
 		return blossom.BlobDescriptor{
 			Hash:     *hints.Hash,
-			Type:     mime,
+			Type:     hints.Type,
 			Size:     size,
 			Uploaded: meta.CreatedAt.Unix(),
 		}, nil
