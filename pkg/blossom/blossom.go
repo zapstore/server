@@ -67,7 +67,7 @@ func Setup(
 
 	blossom.On.Check = Check(store)
 	blossom.On.Download = Download(store, bunny)
-	blossom.On.Upload = Upload(store, bunny, limiter)
+	blossom.On.Upload = Upload(store, bunny, limiter, config.StallTimeout)
 	return blossom, nil
 }
 
@@ -113,18 +113,34 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 	}
 }
 
-func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+// stallReader resets a timer on every successful Read, enabling stall detection for streaming uploads.
+type stallReader struct {
+	data    io.Reader
+	timer   *time.Timer
+	timeout time.Duration
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.data.Read(p)
+	if n > 0 {
+		s.timer.Reset(s.timeout)
+	}
+	return n, err
+}
+
+func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTimeout time.Duration) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+		if data == nil {
+			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("body is empty")
+		}
 
 		// To avoid wasting bandwidth and Bunny credits,
 		// we check if the blob exists in the store before uploading it.
-		ctx := r.Context()
-
-		meta, err := db.Query(ctx, *hints.Hash)
+		meta, err := db.Query(r.Context(), *hints.Hash)
 		if err == nil {
 			// blob already exists
 			return blossom.BlobDescriptor{
-				Hash:     *hints.Hash,
+				Hash:     meta.Hash,
 				Type:     meta.Type,
 				Size:     meta.Size,
 				Uploaded: meta.CreatedAt.Unix(),
@@ -137,14 +153,24 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
-		// upload to Bunny
+		// upload to Bunny directly, enforcing the stall timeout to prevent clients from uploading too slowly.
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+
+		reader := &stallReader{
+			data:    data,
+			timer:   time.AfterFunc(stallTimeout, cancel),
+			timeout: stallTimeout,
+		}
+		defer reader.timer.Stop()
+
 		name := BlobPath(*hints.Hash, hints.Type)
 		sha256 := hints.Hash.Hex()
 
-		err = client.Upload(ctx, data, name, sha256)
+		err = client.Upload(ctx, reader, name, sha256)
 		if errors.Is(err, bunny.ErrInvalidChecksum) {
 			// punish the client for providing a bad hash
-			cost := 20.0
+			cost := 200.0
 			limiter.Penalize(r.IP().Group(), cost)
 			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
 		}
@@ -162,11 +188,11 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter) func(r b
 
 		// punish the client if it provided bad hints.
 		if hints.Size < size {
-			cost := 50.0
+			cost := 100.0
 			limiter.Penalize(r.IP().Group(), cost)
 		}
 		if mime != hints.Type {
-			cost := 20.0
+			cost := 50.0
 			limiter.Penalize(r.IP().Group(), cost)
 		}
 

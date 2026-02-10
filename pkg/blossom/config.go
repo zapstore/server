@@ -2,6 +2,7 @@ package blossom
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/zapstore/server/pkg/blossom/bunny"
 )
@@ -17,6 +18,9 @@ type Config struct {
 	// AllowedContentTypes is a list of content types that are allowed to be uploaded to the blossom server.
 	// Default is "application/vnd.android.package-archive" and common image types.
 	AllowedMedia []string `env:"BLOSSOM_ALLOWED_MEDIA"`
+
+	// The no-progress timeout for streaming uploads. Default is 30 seconds.
+	StallTimeout time.Duration `env:"BLOSSOM_STALL_TIMEOUT"`
 
 	Bunny bunny.Config
 }
@@ -34,7 +38,8 @@ func NewConfig() Config {
 			"image/heif",
 			"image/svg+xml",
 		},
-		Bunny: bunny.NewConfig(),
+		StallTimeout: 30 * time.Second,
+		Bunny:        bunny.NewConfig(),
 	}
 }
 
@@ -44,6 +49,9 @@ func (c Config) Validate() error {
 	}
 	if c.Port == "" {
 		return fmt.Errorf("port is required")
+	}
+	if c.StallTimeout < 5*time.Second {
+		return fmt.Errorf("stall timeout must be greater than 5s to function reliably")
 	}
 
 	for _, mime := range c.AllowedMedia {
@@ -63,5 +71,6 @@ func (c Config) String() string {
 		"\tHostname: %s\n"+
 		"\tPort: %s\n"+
 		"\tAllowed Media: %v\n"+
-		c.Bunny.String(), c.Hostname, c.Port, c.AllowedMedia)
+		"\tStall Timeout: %v\n"+
+		c.Bunny.String(), c.Hostname, c.Port, c.AllowedMedia, c.StallTimeout)
 }

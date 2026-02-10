@@ -14,8 +14,8 @@ type Config struct {
 	// The hostname of the CDN (e.g. "zapstore.b-cdn.net"). It must not include the scheme.
 	CDN string `env:"BUNNY_CDN_HOSTNAME"`
 
-	// The timeout for the requests to the Bunny storage zone. Default is 10 seconds.
-	Timeout time.Duration `env:"BUNNY_REQUEST_TIMEOUT"`
+	// The hard ceiling for requests to Bunny. Default is 20 minutes.
+	RequestTimeout time.Duration `env:"BUNNY_REQUEST_TIMEOUT"`
 }
 
 type StorageZone struct {
@@ -32,7 +32,7 @@ type StorageZone struct {
 
 func NewConfig() Config {
 	return Config{
-		Timeout: 10 * time.Second,
+		RequestTimeout: 20 * time.Minute,
 	}
 }
 
@@ -46,9 +46,10 @@ func (c Config) Validate() error {
 	if len(c.StorageZone.Password) < 8 {
 		return errors.New("storage zone password must be specified and at least 8 characters long")
 	}
-	if c.Timeout < time.Second {
-		return errors.New("timeout must be greater than 1s to function reliably")
+	if c.RequestTimeout < 20*time.Second {
+		return errors.New("request timeout must be greater than 20s to function reliably")
 	}
+
 	if err := ValidateHostname(c.CDN); err != nil {
 		return fmt.Errorf("CDN hostname: %w", err)
 	}
@@ -74,6 +75,9 @@ func ValidateHostname(hostname string) error {
 	if parsed.Host == "" {
 		return errors.New("hostname must contain a valid host")
 	}
+	if parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return errors.New("hostname must not include a path, query, or fragment")
+	}
 	return nil
 }
 
@@ -85,7 +89,7 @@ func (c Config) String() string {
 		"\t\tName: %s\n"+
 		"\t\tHostname: %s\n"+
 		"\t\tPassword: %s\n",
-		c.Timeout,
+		c.RequestTimeout,
 		c.CDN,
 		c.StorageZone.Name,
 		c.StorageZone.Hostname,

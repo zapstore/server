@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/pippellia-btc/blossom"
 )
@@ -28,26 +27,10 @@ type Client struct {
 	config Config
 }
 
-// stallReader resets a timer on every successful Read,
-// enabling stall detection for streaming uploads.
-type stallReader struct {
-	r       io.Reader
-	timer   *time.Timer
-	timeout time.Duration
-}
-
-func (sr *stallReader) Read(p []byte) (int, error) {
-	n, err := sr.r.Read(p)
-	if n > 0 {
-		sr.timer.Reset(sr.timeout)
-	}
-	return n, err
-}
-
 // NewClient returns a client from the provided [Config], which is assumed to have been validated.
 func NewClient(c Config) (Client, error) {
 	client := Client{
-		http:   http.Client{Timeout: c.Timeout},
+		http:   http.Client{Timeout: c.RequestTimeout},
 		config: c,
 	}
 	return client, nil
@@ -159,13 +142,6 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 		}
 	}
 
-	// Stall detection: cancel if no data flows for the configured timeout.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	timer := time.AfterFunc(c.config.Timeout, cancel)
-	defer timer.Stop()
-	data = &stallReader{r: data, timer: timer, timeout: c.config.Timeout}
-
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodPut, c.StorageURL(path), data,
 	)
@@ -178,8 +154,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 		req.Header.Add("Checksum", strings.ToUpper(sha256))
 	}
 
-	// Use a client without a wall-clock timeout; stall detection handles cancellation.
-	res, err := (&http.Client{}).Do(req)
+	res, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to upload: %w", err)
 	}
