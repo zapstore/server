@@ -492,12 +492,13 @@ func extractBlobHashes(db *sql.DB) ([]string, error) {
 	defer latestReleaseStmt.Close()
 
 	// Legacy releases don't have an "i" tag; instead, the "d" tag is "appID@version".
-	// The "d" tag is indexed by the base schema for addressable kinds (30000-39999).
+	// Read from events.tags JSON so we don't rely on the tags table indexing "d".
 	legacyReleaseStmt, err := db.Prepare(`
 		SELECT e.tags
-		FROM events e
-		JOIN tags t ON t.event_id = e.id AND t.key = 'd'
-		WHERE e.kind = 30063 AND t.value LIKE ?
+		FROM events e, json_each(e.tags) AS j
+		WHERE e.kind = 30063
+		  AND json_extract(j.value, '$[0]') = 'd'
+		  AND json_extract(j.value, '$[1]') LIKE ?
 		ORDER BY e.created_at DESC
 		LIMIT 1
 	`)
