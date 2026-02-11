@@ -276,6 +276,30 @@ func uploadMissing(ctx context.Context, blobs []blobInfo, bunny blossomBunny.Cli
 
 	dlClient := &http.Client{Timeout: 5 * time.Minute}
 
+	// Step 1: Fix MIME types in blossom DB.
+	// Entries with wrong MIME cause 307 → .bin → 404 when the file is actually .apk, etc.
+	var mimeFixed int
+	for _, blob := range blobs {
+		if blob.mime == "" {
+			continue
+		}
+		res, err := store.DB.ExecContext(ctx,
+			`UPDATE blobs SET type = ? WHERE hash = ? AND type != ?`,
+			blob.mime, blob.hash, blob.mime,
+		)
+		if err != nil {
+			log.Printf("  mime fix %s: %v", blob.hash, err)
+			continue
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			mimeFixed++
+		}
+	}
+	if mimeFixed > 0 {
+		log.Printf("  fixed MIME type for %d blobs in blossom DB", mimeFixed)
+	}
+
+	// Step 2: Verify and upload.
 	var stats struct {
 		total, existed, uploaded, notFound, failed int
 	}
@@ -283,6 +307,12 @@ func uploadMissing(ctx context.Context, blobs []blobInfo, bunny blossomBunny.Cli
 	for i, blob := range blobs {
 		stats.total++
 		tag := fmt.Sprintf("[%d/%d]", i+1, len(blobs))
+
+		// Progress logging every 200 blobs.
+		if i > 0 && i%200 == 0 {
+			log.Printf("  progress: %d/%d checked (%d existed, %d uploaded, %d failed)",
+				i, len(blobs), stats.existed, stats.uploaded, stats.failed)
+		}
 
 		// Check full chain: cdn → 307 → Location → 200.
 		exists, err := verifyBlob(ctx, noRedirect, dlClient, blob.hash)
@@ -361,8 +391,17 @@ func uploadMissing(ctx context.Context, blobs []blobInfo, bunny blossomBunny.Cli
 			continue
 		}
 
-		// Verify the full redirect chain after upload.
-		ok, err := verifyBlob(ctx, noRedirect, dlClient, blob.hash)
+		// Verify the full redirect chain after upload, with retries for CDN propagation.
+		var ok bool
+		for attempt := range 3 {
+			if attempt > 0 {
+				time.Sleep(2 * time.Second)
+			}
+			ok, err = verifyBlob(ctx, noRedirect, dlClient, blob.hash)
+			if ok {
+				break
+			}
+		}
 		if err != nil || !ok {
 			log.Printf("%s %s: VERIFY FAILED after upload (ok=%v err=%v)", tag, blob.hash, ok, err)
 			stats.failed++
@@ -379,6 +418,7 @@ func uploadMissing(ctx context.Context, blobs []blobInfo, bunny blossomBunny.Cli
 	log.Printf("  uploaded:  %d", stats.uploaded)
 	log.Printf("  not found: %d (missing from bcdn)", stats.notFound)
 	log.Printf("  failed:    %d", stats.failed)
+	log.Printf("  mime fixed:%d (corrected in blossom DB)", mimeFixed)
 }
 
 // ─── Verify ──────────────────────────────────────────────────────────────────
