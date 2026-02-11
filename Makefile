@@ -20,25 +20,18 @@ linux-amd64_GOOS   := linux
 linux-amd64_GOARCH := amd64
 linux-amd64_CC     := $(or $(CC_LINUX_AMD64),x86_64-linux-gnu-gcc)
 
-.PHONY: all clean server migrate \
-	$(PLATFORMS:%=server-%) $(PLATFORMS:%=migrate-%)
+.PHONY: all clean server \
+	$(PLATFORMS:%=server-%)
 
-all: server migrate
+all: server
 
 server: $(PLATFORMS:%=server-%)
-migrate: $(PLATFORMS:%=migrate-%)
 
 $(PLATFORMS:%=server-%):
 	$(eval P := $(@:server-%=%))
 	CGO_ENABLED=1 GOOS=$($(P)_GOOS) GOARCH=$($(P)_GOARCH) CC="$($(P)_CC)" \
 		go build $(GO_TAGS) -ldflags "$(LDFLAGS)" \
 		-o $(BUILD_DIR)/server-$(P) ./cmd/
-
-$(PLATFORMS:%=migrate-%):
-	$(eval P := $(@:migrate-%=%))
-	CGO_ENABLED=1 GOOS=$($(P)_GOOS) GOARCH=$($(P)_GOARCH) CC="$($(P)_CC)" \
-		go build $(GO_TAGS) -ldflags "$(LDFLAGS)" \
-		-o $(BUILD_DIR)/migrate-$(P) ./cmd/migrate/
 
 clean:
 	rm -rf $(BUILD_DIR)
