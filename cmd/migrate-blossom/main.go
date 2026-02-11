@@ -156,7 +156,7 @@ func collectHashes(ctx context.Context, relayURL string) ([]blobInfo, error) {
 
 	// Step 1: Fetch all apps (kind 32267).
 	log.Printf("  fetching apps (kind 32267) from %s ...", relayURL)
-	apps, err := relay.QuerySync(ctx, nostr.Filter{Kinds: []int{32267}})
+	apps, err := fetchAll(ctx, relay, nostr.Filter{Kinds: []int{32267}})
 	if err != nil {
 		return nil, fmt.Errorf("fetch apps: %w", err)
 	}
@@ -203,7 +203,7 @@ func collectHashes(ctx context.Context, relayURL string) ([]blobInfo, error) {
 	authors := unique(coords, func(c coord) string { return c.pubkey })
 	dTags := unique(coords, func(c coord) string { return c.dTag })
 
-	releases, err := relay.QuerySync(ctx, nostr.Filter{
+	releases, err := fetchAll(ctx, relay, nostr.Filter{
 		Kinds:   []int{30063},
 		Authors: authors,
 		Tags:    nostr.TagMap{"d": dTags},
@@ -232,10 +232,10 @@ func collectHashes(ctx context.Context, relayURL string) ([]blobInfo, error) {
 	}
 	log.Printf("  %d asset event references (e tags)", len(assetIDs))
 
-	// Step 4: Fetch asset events in batches and extract 'x' tags.
+	// Step 4: Fetch asset events in batches (max 100 IDs per request) and extract 'x' tags.
 	if len(assetIDs) > 0 {
 		log.Println("  fetching asset events ...")
-		const batch = 200
+		const batch = 100
 		for i := 0; i < len(assetIDs); i += batch {
 			end := min(i+batch, len(assetIDs))
 			evts, err := relay.QuerySync(ctx, nostr.Filter{IDs: assetIDs[i:end]})
@@ -446,6 +446,56 @@ func printDryRun(blobs []blobInfo, start time.Time) {
 	}
 	fmt.Println()
 	log.Printf("%d blob hashes in %s", len(blobs), time.Since(start).Round(time.Millisecond))
+}
+
+// ─── Relay pagination ────────────────────────────────────────────────────────
+
+// fetchAll paginates through a relay query using Until as a cursor.
+// The relay enforces a maximum of 100 events per request.
+func fetchAll(ctx context.Context, relay *nostr.Relay, filter nostr.Filter) ([]*nostr.Event, error) {
+	const limit = 100
+	filter.Limit = limit
+
+	var all []*nostr.Event
+	seen := make(map[string]bool)
+
+	for {
+		events, err := relay.QuerySync(ctx, filter)
+		if err != nil {
+			return all, err
+		}
+		if len(events) == 0 {
+			break
+		}
+
+		var added int
+		var oldest nostr.Timestamp
+		for _, ev := range events {
+			if !seen[ev.ID] {
+				seen[ev.ID] = true
+				all = append(all, ev)
+				added++
+			}
+			if oldest == 0 || ev.CreatedAt < oldest {
+				oldest = ev.CreatedAt
+			}
+		}
+
+		// No new events — all duplicates from overlapping timestamps.
+		if added == 0 {
+			break
+		}
+
+		// Fewer than limit means we've exhausted the result set.
+		if len(events) < limit {
+			break
+		}
+
+		// Move the cursor back.
+		filter.Until = &oldest
+	}
+
+	return all, nil
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
