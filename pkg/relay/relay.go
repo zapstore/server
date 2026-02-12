@@ -191,6 +191,12 @@ func specificity(filter nostr.Filter) int {
 	if filter.Until != nil {
 		points += 1
 	}
+	if filter.LimitZero {
+		points += 3
+	}
+	if filter.Limit != 0 && filter.Limit < 100 {
+		points += 1
+	}
 	return points
 }
 
