@@ -46,6 +46,7 @@ func Setup(
 		rely.WithDomain(config.Hostname),
 		rely.WithInfo(config.Info.NIP11()),
 		rely.WithMaxMessageSize(config.MaxMessageBytes),
+		rely.WithClientResponseLimit(config.ResponseLimit),
 	)
 
 	relay.Reject.Connection.Clear()
