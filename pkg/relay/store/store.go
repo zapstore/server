@@ -18,13 +18,21 @@ import (
 var schema string
 
 func New(path string) (*sqlite.Store, error) {
-	return sqlite.New(
+	store, err := sqlite.New(
 		path,
 		sqlite.WithQueryBuilder(queryBuilder),
 		sqlite.WithAdditionalSchema(schema),
 		sqlite.WithoutEventPolicy(),  // events have been validated by the relay
 		sqlite.WithoutFilterPolicy(), // filters have been validated by the relay
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := store.DB.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+	return store, nil
 }
 
 // queryBuilder handles FTS search for apps when there's exactly one app search filter.
