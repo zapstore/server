@@ -1,6 +1,7 @@
 package events
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,13 +30,15 @@ func (e AppIdentifier) Validate() error {
 	if len(parts) != 3 {
 		return fmt.Errorf("invalid app set element: %s", e)
 	}
-	if parts[0] != "32267" {
+	kind, pk, appID := parts[0], parts[1], parts[2]
+
+	if kind != "32267" {
 		return fmt.Errorf("invalid app set element: %s", e)
 	}
-	if err := ValidateHash(parts[1]); err != nil {
-		return fmt.Errorf("invalid pubkey in app set element: %w", err)
+	if !nostr.IsValidPublicKey(pk) {
+		return errors.New("invalid pubkey in app set element")
 	}
-	if parts[2] == "" {
+	if appID == "" {
 		return fmt.Errorf("invalid app ID in app set element: %s", e)
 	}
 	return nil
@@ -69,4 +72,40 @@ func ValidateAppSet(event *nostr.Event) error {
 		return err
 	}
 	return appSet.Validate()
+}
+
+// ExtractAppsFromSet returns all app IDs (kind 32267 identifiers)
+// referenced by an AppSet (kind 30267) event via "a" tags.
+//
+// Expected "a" tag format:
+//
+//	["a", "<32267>:<pubkey>:<identifier>"]
+func ExtractAppsFromSet(e nostr.Event) []string {
+	if e.Kind != KindAppSet {
+		return nil
+	}
+
+	var appIDs []string
+
+	for _, tag := range e.Tags {
+		if len(tag) < 2 || tag[0] != "a" {
+			continue
+		}
+
+		parts := strings.Split(tag[1], ":")
+		if len(parts) != 3 {
+			continue
+		}
+
+		kind, appID := parts[0], parts[2]
+		if kind != "32267" {
+			continue
+		}
+		if appID == "" {
+			continue
+		}
+
+		appIDs = append(appIDs, appID)
+	}
+	return appIDs
 }
