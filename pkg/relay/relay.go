@@ -43,7 +43,7 @@ func Setup(
 ) (*rely.Relay, error) {
 
 	relay := rely.NewRelay(
-		rely.WithDomain(config.Hostname),
+		rely.WithAuthURL(config.Hostname),
 		rely.WithInfo(config.Info.NIP11()),
 		rely.WithMaxMessageSize(config.MaxMessageBytes),
 		rely.WithClientResponseLimit(config.ResponseLimit),
@@ -101,11 +101,10 @@ func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
 	}
 }
 
-func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, filters nostr.Filters) ([]nostr.Event, error) {
-	return func(ctx context.Context, c rely.Client, filters nostr.Filters) ([]nostr.Event, error) {
+func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
+	return func(ctx context.Context, _ rely.Client, _ string, filters nostr.Filters) ([]nostr.Event, error) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-
 		return store.Query(ctx, filters...)
 	}
 }
@@ -131,8 +130,8 @@ func RateEventIP(limiter rate.Limiter) func(client rely.Client, _ *nostr.Event) 
 	}
 }
 
-func RateReqIP(limiter rate.Limiter) func(client rely.Client, filters nostr.Filters) error {
-	return func(client rely.Client, filters nostr.Filters) error {
+func RateReqIP(limiter rate.Limiter) func(client rely.Client, id string, filters nostr.Filters) error {
+	return func(client rely.Client, id string, filters nostr.Filters) error {
 		cost := 1.0
 		if len(filters) > 10 {
 			cost = 5.0
@@ -146,8 +145,8 @@ func RateReqIP(limiter rate.Limiter) func(client rely.Client, filters nostr.Filt
 	}
 }
 
-func FiltersExceed(n int) func(rely.Client, nostr.Filters) error {
-	return func(_ rely.Client, filters nostr.Filters) error {
+func FiltersExceed(n int) func(_ rely.Client, _ string, filters nostr.Filters) error {
+	return func(_ rely.Client, _ string, filters nostr.Filters) error {
 		if len(filters) > n {
 			return ErrTooManyFilters
 		}
