@@ -12,13 +12,13 @@ type Config struct {
 	// InitialTokens is the initial number of tokens for a new bucket. Default is 100.
 	InitialTokens int `env:"RATE_INITIAL_TOKENS"`
 
-	// MaxTokens is the maximum number of tokens for a bucket. Default is 100.
+	// MaxTokens is the maximum number of tokens for a bucket. Default is 300.
 	MaxTokens int `env:"RATE_MAX_TOKENS"`
 
-	// TokensPerInterval is the number of tokens added to a bucket per interval. Default is 10.
+	// TokensPerInterval is the number of tokens added to a bucket per interval. Default is 100.
 	TokensPerInterval int `env:"RATE_TOKENS_PER_INTERVAL"`
 
-	// Interval is the duration of the interval. Default is 1 second.
+	// Interval is the duration of the interval. Default is 1 minute.
 	Interval time.Duration `env:"RATE_INTERVAL"`
 }
 
