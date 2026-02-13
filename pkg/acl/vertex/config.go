@@ -8,6 +8,23 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+type Config struct {
+	// The algorithm to use to decide whether to allow a pubkey.
+	Algorithm Algorithm
+
+	// The secret key to use for signing requests to the Vertex DVM.
+	SecretKey string `env:"VERTEX_SECRET_KEY"`
+
+	// Timeout is the maximum time to wait for a response from Vertex. Default is 10 seconds.
+	Timeout time.Duration `env:"VERTEX_REQUEST_TIMEOUT"`
+
+	// CacheExpiration time for ranks in the cache. Default is 24 hours.
+	CacheExpiration time.Duration `env:"VERTEX_CACHE_EXPIRATION"`
+
+	// CacheSize is the maximum number of entries in the cache. Default is 100_000.
+	CacheSize int `env:"VERTEX_CACHE_SIZE"`
+}
+
 type Sort string
 
 const (
@@ -23,9 +40,39 @@ type Algorithm struct {
 	// The source of pubkey, used when the Sort is SortPersonalized. Default is "".
 	Source string `env:"VERTEX_SOURCE"`
 
-	// The threshold above which an unknown pubkey is allowed to publish to the relay.
-	// Default is 0.0, which means that all pubkeys can publish to the relay.
+	// The threshold above which an unknown pubkey is allowed.
+	// Default is 0.0, which means that all pubkeys will be allowed.
 	Threshold float64 `env:"VERTEX_THRESHOLD"`
+}
+
+func NewConfig() Config {
+	return Config{
+		Algorithm:       Algorithm{Sort: SortGlobal},
+		Timeout:         10 * time.Second,
+		CacheExpiration: 24 * time.Hour,
+		CacheSize:       100_000,
+	}
+}
+
+func (c Config) Validate() error {
+	if err := c.Algorithm.Validate(); err != nil {
+		return err
+	}
+
+	if c.SecretKey == "" {
+		return errors.New("secret key is empty or not set")
+	}
+	if !nostr.IsValid32ByteHex(c.SecretKey) {
+		return errors.New("secret key is not a valid 32 byte hex string")
+	}
+
+	if c.CacheExpiration < time.Second {
+		return errors.New("cache expiration must be greater than 1 second")
+	}
+	if c.CacheSize <= 0 {
+		return errors.New("cache size must be greater than 0")
+	}
+	return nil
 }
 
 func (a Algorithm) Validate() error {
@@ -60,52 +107,10 @@ func (a Algorithm) Validate() error {
 	}
 }
 
-type Config struct {
-	// The algorithm to use to decide whether to allow a pubkey.
-	Algorithm Algorithm
-
-	// The secret key to use for signing requests to the Vertex DVM.
-	SecretKey string `env:"VERTEX_SECRET_KEY"`
-
-	// CacheExpiration time for ranks in the cache. Default is 24 hours.
-	CacheExpiration time.Duration `env:"VERTEX_CACHE_EXPIRATION"`
-
-	// CacheSize is the maximum number of entries in the cache. Default is 100_000.
-	CacheSize int `env:"VERTEX_CACHE_SIZE"`
-}
-
-func NewConfig() Config {
-	return Config{
-		Algorithm:       Algorithm{Sort: SortGlobal},
-		CacheExpiration: 24 * time.Hour,
-		CacheSize:       100_000,
-	}
-}
-
-func (c Config) Validate() error {
-	if err := c.Algorithm.Validate(); err != nil {
-		return err
-	}
-
-	if c.SecretKey == "" {
-		return errors.New("secret key is empty or not set")
-	}
-	if !nostr.IsValid32ByteHex(c.SecretKey) {
-		return errors.New("secret key is not a valid 32 byte hex string")
-	}
-
-	if c.CacheExpiration < time.Second {
-		return errors.New("cache expiration must be greater than 1 second")
-	}
-	if c.CacheSize <= 0 {
-		return errors.New("cache size must be greater than 0")
-	}
-	return nil
-}
-
 func (c Config) String() string {
 	return fmt.Sprintf("Vertex:\n"+
 		"\tSecret Key: %s\n"+
+		"\tRequest Timeout: %v\n"+
 		"\tCache Expiration: %v\n"+
 		"\tCache Size: %d\n"+
 		"\tAlgorithm:\n"+
@@ -113,6 +118,7 @@ func (c Config) String() string {
 		"\t\tSort: %s\n"+
 		"\t\tThreshold: %f\n",
 		c.SecretKey[:4]+"___REDACTED___"+c.SecretKey[len(c.SecretKey)-4:],
+		c.Timeout,
 		c.CacheExpiration, c.CacheSize,
 		c.Algorithm.Source,
 		c.Algorithm.Sort,

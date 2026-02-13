@@ -14,7 +14,7 @@ const (
 
 // Run this test with:
 //
-// SECRET_KEY=<your_secret_key> go test
+// VERTEX_SECRET_KEY=<your_secret_key> go test
 //
 // Where <your_secret_key> is a secret key with enough credits for signing the Vertex DVM requests.
 func TestFilter_Allow(t *testing.T) {
@@ -57,16 +57,12 @@ func TestFilter_Allow(t *testing.T) {
 	}
 
 	config := NewConfig()
-	config.SecretKey = os.Getenv("SECRET_KEY")
+	config.SecretKey = os.Getenv("VERTEX_SECRET_KEY")
 	if config.SecretKey == "" {
-		t.Fatalf("SECRET_KEY environment variable is not set")
+		t.Fatalf("VERTEX_SECRET_KEY environment variable is not set")
 	}
 
-	filter, err := NewFilter(config)
-	if err != nil {
-		t.Fatalf("failed to create a new filter: %v", err)
-	}
-
+	filter := NewFilter(config)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			filter.config.Algorithm = test.algorithm

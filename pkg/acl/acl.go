@@ -74,10 +74,7 @@ func New(c Config, dir string, log *slog.Logger) (*Controller, error) {
 	}
 
 	if c.UnknownPubkeyPolicy == UseVertex {
-		acl.vertex, err = vertex.NewFilter(c.Vertex)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create vertex filter: %w", err)
-		}
+		acl.vertex = vertex.NewFilter(c.Vertex)
 	}
 
 	if _, err = acl.reloadAllowedPubkeys(); err != nil {
