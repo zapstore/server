@@ -11,6 +11,7 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/events"
+	"github.com/zapstore/server/pkg/events/legacy"
 )
 
 var ctx = context.Background()
@@ -249,7 +250,7 @@ func TestAppTagsIndexing(t *testing.T) {
 		ID:        "app123",
 		PubKey:    "pubkey123",
 		CreatedAt: nostr.Timestamp(1700000000),
-		Kind:      32267, // KindApp
+		Kind:      events.KindApp,
 		Tags: nostr.Tags{
 			{"d", "com.example.app"},
 			{"name", "Example App"},
@@ -295,7 +296,7 @@ func TestAppFTSIndexing(t *testing.T) {
 		ID:        "app123",
 		PubKey:    "pubkey123",
 		CreatedAt: nostr.Timestamp(1700000000),
-		Kind:      32267,
+		Kind:      events.KindApp,
 		Tags: nostr.Tags{
 			{"d", "com.example.app"},
 			{"name", "Signal Messenger"},
@@ -366,7 +367,7 @@ func TestReleaseTagsIndexing(t *testing.T) {
 		ID:        "release123",
 		PubKey:    "pubkey123",
 		CreatedAt: nostr.Timestamp(1700000000),
-		Kind:      30063, // KindRelease
+		Kind:      events.KindRelease,
 		Tags: nostr.Tags{
 			{"d", "com.example.app@1.0.0"},
 			{"i", "com.example.app"},
@@ -408,7 +409,7 @@ func TestAssetTagsIndexing(t *testing.T) {
 		ID:        "asset123",
 		PubKey:    "pubkey123",
 		CreatedAt: nostr.Timestamp(1700000000),
-		Kind:      3063, // KindAsset
+		Kind:      events.KindAsset,
 		Tags: nostr.Tags{
 			{"i", "com.example.app"},
 			{"x", "abc123def456"},
@@ -453,7 +454,7 @@ func TestFileTagsIndexing(t *testing.T) {
 		ID:        "file123",
 		PubKey:    "pubkey123",
 		CreatedAt: nostr.Timestamp(1700000000),
-		Kind:      1063, // KindFile (legacy)
+		Kind:      legacy.KindFile,
 		Tags: nostr.Tags{
 			{"x", "abc123def456"},
 			{"url", "https://cdn.example.com/app.apk"},
@@ -524,12 +525,16 @@ func BenchmarkSaveApp(b *testing.B) {
 	baseTags := nostr.Tags{
 		{"d", "com.example.app"},
 		{"name", "Example App"},
-		{"summary", "A benchmarked app"},
 		{"f", "android-arm64-v8a"},
-		{"t", "benchmark"},
-		{"license", "MIT"},
+		{"f", "linux-x86_64"},
+		{"summary", "A short description"},
+		{"icon", "https://example.com/icon.png"},
+		{"image", "https://example.com/screenshot1.png"},
+		{"t", "productivity"},
+		{"t", "tools"},
 		{"url", "https://example.com"},
 		{"repository", "https://github.com/example/app"},
+		{"license", "MIT"},
 	}
 
 	toSave := make([]*nostr.Event, b.N)
@@ -539,7 +544,7 @@ func BenchmarkSaveApp(b *testing.B) {
 
 		toSave[i] = &nostr.Event{
 			ID:        "bench-app-" + strconv.Itoa(i),
-			PubKey:    "pubkey-bench",
+			PubKey:    "pubkey-bench-" + strconv.Itoa(i),
 			CreatedAt: nostr.Timestamp(1700000000 + int64(i)),
 			Kind:      events.KindApp,
 			Tags:      tags,
@@ -552,7 +557,7 @@ func BenchmarkSaveApp(b *testing.B) {
 	b.ResetTimer()
 
 	for i := range b.N {
-		if _, err := store.Save(ctx, toSave[i]); err != nil {
+		if _, err := store.Replace(ctx, toSave[i]); err != nil {
 			b.Fatalf("failed to save event %s: %v", toSave[i], err)
 		}
 	}
