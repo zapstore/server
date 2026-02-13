@@ -42,6 +42,18 @@ BEGIN
 	DELETE FROM apps_fts WHERE id = OLD.id;
 END;
 
+-- KindAppSet (30267) - App Set / Stack
+CREATE TRIGGER IF NOT EXISTS app_set_tags_ai AFTER INSERT ON events
+WHEN NEW.kind = 30267
+BEGIN
+	INSERT OR IGNORE INTO tags (event_id, key, value)
+	SELECT NEW.id, json_extract(value, '$[0]'), json_extract(value, '$[1]')
+	FROM json_each(NEW.tags)
+	WHERE json_type(value) = 'array'
+		AND json_array_length(value) > 1
+		AND json_extract(value, '$[0]') IN ('a', 'f');
+END;
+
 -- KindRelease (30063)
 CREATE TRIGGER IF NOT EXISTS release_tags_ai AFTER INSERT ON events
 WHEN NEW.kind = 30063
