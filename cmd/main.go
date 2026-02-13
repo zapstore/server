@@ -26,6 +26,10 @@ func main() {
 		panic(err)
 	}
 
+	logger := slog.Default()
+	logger.Info("-------------------server startup-------------------")
+	defer logger.Info("-------------------server shutdown-------------------")
+
 	dataDir := filepath.Join(config.Sys.Dir, "data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		panic(err)
@@ -44,7 +48,6 @@ func main() {
 	defer bstore.Close()
 
 	limiter := rate.NewLimiter(config.Rate)
-	logger := slog.Default()
 
 	aclDir := filepath.Join(config.Sys.Dir, "acl")
 	acl, err := acl.New(config.ACL, aclDir, logger)
