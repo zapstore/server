@@ -60,21 +60,21 @@ func (c Client) CDNURL(path string) string {
 // The caller is responsible for closing the reader.
 func (c Client) Download(ctx context.Context, path string) (io.ReadCloser, error) {
 	if path == "" {
-		return nil, fmt.Errorf("failed to download: %w", ErrEmptyPath)
+		return nil, fmt.Errorf("bunny: failed to download: %w", ErrEmptyPath)
 	}
 
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodGet, c.StorageURL(path), nil,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("bunny: failed to create request: %w", err)
 	}
 
 	c.setHeaders(req)
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to download: %w", err)
+		return nil, fmt.Errorf("bunny: failed to download: %w", err)
 	}
 
 	if res.StatusCode == http.StatusOK {
@@ -83,15 +83,15 @@ func (c Client) Download(ctx context.Context, path string) (io.ReadCloser, error
 
 	res.Body.Close()
 	if res.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("failed to download: %w", ErrFileNotFound)
+		return nil, fmt.Errorf("bunny: failed to download: %w", ErrFileNotFound)
 	}
-	return nil, fmt.Errorf("failed to download: status %s", res.Status)
+	return nil, fmt.Errorf("bunny: failed to download: status %s", res.Status)
 }
 
 // Check returns the metadata of the file at the specified path on the CDN.
 func (c Client) Check(ctx context.Context, path string) (mime string, size int64, err error) {
 	if path == "" {
-		return "", 0, fmt.Errorf("failed to check: %w", ErrEmptyPath)
+		return "", 0, fmt.Errorf("bunny: failed to check: %w", ErrEmptyPath)
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -99,12 +99,12 @@ func (c Client) Check(ctx context.Context, path string) (mime string, size int64
 	)
 
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to check: failed to create request: %w", err)
+		return "", 0, fmt.Errorf("bunny: failed to check: failed to create request: %w", err)
 	}
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to check: %w", err)
+		return "", 0, fmt.Errorf("bunny: failed to check: %w", err)
 	}
 	defer res.Body.Close()
 
@@ -113,15 +113,15 @@ func (c Client) Check(ctx context.Context, path string) (mime string, size int64
 		mime = res.Header.Get("Content-Type")
 		size, err = strconv.ParseInt(res.Header.Get("Content-Length"), 10, 64)
 		if err != nil {
-			return "", 0, fmt.Errorf("failed to check: failed to parse content length: %w", err)
+			return "", 0, fmt.Errorf("bunny: failed to check: failed to parse content length: %w", err)
 		}
 		return mime, size, nil
 
 	case http.StatusNotFound:
-		return "", 0, fmt.Errorf("failed to check: %w", ErrFileNotFound)
+		return "", 0, fmt.Errorf("bunny: failed to check: %w", ErrFileNotFound)
 
 	default:
-		return "", 0, fmt.Errorf("failed to check: status %s", res.Status)
+		return "", 0, fmt.Errorf("bunny: failed to check: status %s", res.Status)
 	}
 }
 
@@ -131,14 +131,14 @@ func (c Client) Check(ctx context.Context, path string) (mime string, size int64
 // If the sha256(data) != sha256, Bunny will reject the upload and [ErrChecksumMismatch] will be returned.
 func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 string) error {
 	if data == nil {
-		return fmt.Errorf("failed to upload: %w", ErrEmptyData)
+		return fmt.Errorf("bunny: failed to upload: %w", ErrEmptyData)
 	}
 	if path == "" {
-		return fmt.Errorf("failed to upload: %w", ErrEmptyPath)
+		return fmt.Errorf("bunny: failed to upload: %w", ErrEmptyPath)
 	}
 	if sha256 != "" {
 		if err := blossom.ValidateHash(sha256); err != nil {
-			return fmt.Errorf("failed to upload: %w: %w", ErrInvalidChecksum, err)
+			return fmt.Errorf("bunny: failed to upload: %w: %w", ErrInvalidChecksum, err)
 		}
 	}
 
@@ -146,7 +146,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 		ctx, http.MethodPut, c.StorageURL(path), data,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("bunny: failed to create request: %w", err)
 	}
 
 	c.setHeaders(req)
@@ -156,7 +156,7 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to upload: %w", err)
+		return fmt.Errorf("bunny: failed to upload: %w", err)
 	}
 	defer res.Body.Close()
 
@@ -167,13 +167,13 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 	case http.StatusBadRequest:
 		body, _ := io.ReadAll(res.Body)
 		if strings.Contains(string(body), "Checksum") {
-			return fmt.Errorf("failed to upload: %w", ErrChecksumMismatch)
+			return fmt.Errorf("bunny: failed to upload: %w", ErrChecksumMismatch)
 		}
-		return fmt.Errorf("failed to upload: status %s: body %s", res.Status, string(body))
+		return fmt.Errorf("bunny: failed to upload: status %s: body %s", res.Status, string(body))
 
 	default:
 		body, _ := io.ReadAll(res.Body)
-		return fmt.Errorf("failed to upload: status %s: body %s", res.Status, string(body))
+		return fmt.Errorf("bunny: failed to upload: status %s: body %s", res.Status, string(body))
 	}
 }
 
@@ -181,21 +181,21 @@ func (c Client) Upload(ctx context.Context, data io.Reader, path string, sha256 
 // Returns nil if the file was deleted successfully, or if the file did not exist.
 func (c Client) Delete(ctx context.Context, path string) error {
 	if path == "" {
-		return fmt.Errorf("failed to delete: %w", ErrEmptyPath)
+		return fmt.Errorf("bunny: failed to delete: %w", ErrEmptyPath)
 	}
 
 	req, err := http.NewRequestWithContext(
 		ctx, http.MethodDelete, c.StorageURL(path), nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("bunny: failed to create request: %w", err)
 	}
 
 	c.setHeaders(req)
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to delete: %w", err)
+		return fmt.Errorf("bunny: failed to delete: %w", err)
 	}
 	defer res.Body.Close()
 
@@ -203,7 +203,7 @@ func (c Client) Delete(ctx context.Context, path string) error {
 		res.StatusCode == http.StatusOK {
 		return nil
 	}
-	return fmt.Errorf("failed to delete: %s", res.Status)
+	return fmt.Errorf("bunny: failed to delete: %s", res.Status)
 }
 
 // setHeaders sets the common headers for the request.
