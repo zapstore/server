@@ -49,7 +49,7 @@ func TestUpload(t *testing.T) {
 	}{
 		{
 			name: "empty data",
-			path: "test.txt",
+			path: "/tests/test.txt",
 			data: nil,
 			err:  ErrEmptyData,
 		},
@@ -61,33 +61,30 @@ func TestUpload(t *testing.T) {
 		},
 		{
 			name:   "invalid sha256",
-			path:   "test.txt",
+			path:   "/tests/test.txt",
 			data:   bytes.NewReader([]byte("This is a test")),
 			sha256: "invalid",
 			err:    ErrInvalidChecksum,
 		},
 		{
 			name: "valid test (no checksum)",
-			path: "test.txt",
+			path: "/tests/test.txt",
 			data: bytes.NewReader([]byte("This is a test")),
 		},
 		{
 			name:   "valid test (with checksum)",
-			path:   "test_with_checksum.txt",
+			path:   "/tests/test_with_checksum.txt",
 			data:   bytes.NewReader([]byte("This is a test with checksum")),
 			sha256: "3323af1d54db3c1c940f90486d1816e9592636125f21b1b29ac927e7a9262ac9",
 		},
 	}
 
-	client, err := NewClient(config)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	client := NewClient(config)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 
-			err = client.Upload(ctx, test.data, test.path, test.sha256)
+			err := client.Upload(ctx, test.data, test.path, test.sha256)
 			if !errors.Is(err, test.err) {
 				t.Fatalf("expected error %v, got %v", test.err, err)
 			}
@@ -108,24 +105,21 @@ func TestDownload(t *testing.T) {
 		},
 		{
 			name: "file does not exists",
-			path: "file_does_not_exist.txt",
+			path: "/tests/file_does_not_exist.txt",
 			err:  ErrFileNotFound,
 		},
 		{
 			name: "file exists",
-			path: "file_exists.txt",
+			path: "/tests/file_exists.txt",
 		},
 	}
 
-	client, err := NewClient(config)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	client := NewClient(config)
 
 	expected := []byte("This is a test")
 	payload := bytes.NewReader(expected)
 
-	if err = client.Upload(ctx, payload, "file_exists.txt", ""); err != nil {
+	if err := client.Upload(ctx, payload, "/tests/file_exists.txt", ""); err != nil {
 		t.Fatalf("failed to upload file: %v", err)
 	}
 
@@ -165,21 +159,18 @@ func TestCheck(t *testing.T) {
 		},
 		{
 			name: "file does not exists",
-			path: "file_does_not_exist.txt",
+			path: "/tests/file_does_not_exist.txt",
 			err:  ErrFileNotFound,
 		},
 		{
 			name: "file exists",
-			path: "file_exists.txt",
+			path: "/tests/file_exists.txt",
 			mime: "text/plain",
 			size: 14,
 		},
 	}
 
-	client, err := NewClient(config)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	client := NewClient(config)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -211,22 +202,19 @@ func TestDelete(t *testing.T) {
 		},
 		{
 			name: "valid delete (file exists)",
-			path: "test.txt",
+			path: "/tests/test.txt",
 		},
 		{
 			name: "valid delete (file does not exist)",
-			path: "test.txt",
+			path: "/tests/test.txt",
 		},
 	}
 
-	client, err := NewClient(config)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	client := NewClient(config)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err = client.Delete(ctx, test.path)
+			err := client.Delete(ctx, test.path)
 			if !errors.Is(err, test.err) {
 				t.Fatalf("expected error %v, got %v", test.err, err)
 			}
