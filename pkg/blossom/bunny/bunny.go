@@ -4,6 +4,7 @@ package bunny
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -28,12 +29,20 @@ type Client struct {
 }
 
 // NewClient returns a client from the provided [Config], which is assumed to have been validated.
-func NewClient(c Config) (Client, error) {
-	client := Client{
-		http:   http.Client{Timeout: c.RequestTimeout},
+func NewClient(c Config) Client {
+	return Client{
+		http: http.Client{
+			Timeout: c.RequestTimeout,
+			Transport: &http.Transport{
+				// Force HTTP/1.1 to avoid HTTP/2 GOAWAY errors, which are currently
+				// impossible to handle gracefully because the request body is not replayable,
+				// as it comes from the request body sent to our blossom server.
+				ForceAttemptHTTP2: false,
+				TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
+			},
+		},
 		config: c,
 	}
-	return client, nil
 }
 
 // StorageURL returns the request URL for the provided path on the storage zone.

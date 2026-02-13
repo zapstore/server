@@ -35,10 +35,7 @@ func Setup(
 	store *store.Store,
 ) (*blossy.Server, error) {
 
-	bunny, err := bunny.NewClient(config.Bunny)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup bunny client: %w", err)
-	}
+	bunny := bunny.NewClient(config.Bunny)
 
 	blossom, err := blossy.NewServer(
 		blossy.WithHostname(config.Hostname),
