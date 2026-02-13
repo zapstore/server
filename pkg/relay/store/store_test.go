@@ -5,6 +5,7 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -510,6 +511,51 @@ func getIndexedTags(t *testing.T, store *sqlite.Store, eventID string) nostr.Tag
 
 	sortTags(tags)
 	return tags
+}
+
+func BenchmarkSaveApp(b *testing.B) {
+	path := b.TempDir() + "/test.db"
+	store, err := New(path)
+	if err != nil {
+		b.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	baseTags := nostr.Tags{
+		{"d", "com.example.app"},
+		{"name", "Example App"},
+		{"summary", "A benchmarked app"},
+		{"f", "android-arm64-v8a"},
+		{"t", "benchmark"},
+		{"license", "MIT"},
+		{"url", "https://example.com"},
+		{"repository", "https://github.com/example/app"},
+	}
+
+	toSave := make([]*nostr.Event, b.N)
+	for i := range b.N {
+		tags := make(nostr.Tags, len(baseTags))
+		copy(tags, baseTags)
+
+		toSave[i] = &nostr.Event{
+			ID:        "bench-app-" + strconv.Itoa(i),
+			PubKey:    "pubkey-bench",
+			CreatedAt: nostr.Timestamp(1700000000 + int64(i)),
+			Kind:      events.KindApp,
+			Tags:      tags,
+			Content:   "Benchmarking app save performance.",
+			Sig:       "sig",
+		}
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := range b.N {
+		if _, err := store.Save(ctx, toSave[i]); err != nil {
+			b.Fatalf("failed to save event %s: %v", toSave[i], err)
+		}
+	}
 }
 
 // expectedTags extracts tags from an event that match the given indexed keys.
