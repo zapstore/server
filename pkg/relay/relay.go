@@ -265,6 +265,10 @@ func AppAlreadyExists(store *sqlite.Store) func(_ rely.Client, e *nostr.Event) e
 
 func AuthorNotAllowed(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) error {
 	return func(_ rely.Client, e *nostr.Event) error {
+		if e.Kind == events.KindAppSet {
+			return nil
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 

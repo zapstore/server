@@ -3,6 +3,7 @@ package events
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -12,14 +13,26 @@ const KindAppSet = 30267
 
 type AppIdentifier string // 32267:<pubkey>:<app_id>
 
-// AppSet represents a set of app identifiers.
+// AppSet represents a set of app identifiers with associated platform identifiers.
 // Learn more here: https://github.com/nostr-protocol/nips/blob/master/51.md#sets
-type AppSet []AppIdentifier
+type AppSet struct {
+	Apps      []AppIdentifier
+	Platforms []string
+}
 
 func (s AppSet) Validate() error {
-	for _, e := range s {
+	for _, e := range s.Apps {
 		if err := e.Validate(); err != nil {
 			return err
+		}
+	}
+
+	if len(s.Platforms) == 0 {
+		return fmt.Errorf("missing 'f' tag (platform identifier)")
+	}
+	for i, p := range s.Platforms {
+		if !slices.Contains(PlatformIdentifiers, p) {
+			return fmt.Errorf("invalid platform identifier in 'f' tag at index %d: %s", i, p)
 		}
 	}
 	return nil
@@ -59,7 +72,9 @@ func ParseAppSet(event *nostr.Event) (AppSet, error) {
 
 		switch tag[0] {
 		case "a":
-			appSet = append(appSet, AppIdentifier(tag[1]))
+			appSet.Apps = append(appSet.Apps, AppIdentifier(tag[1]))
+		case "f":
+			appSet.Platforms = append(appSet.Platforms, tag[1])
 		}
 	}
 	return appSet, nil
