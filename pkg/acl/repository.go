@@ -101,7 +101,7 @@ func (c *Controller) appendAllowedPubkey(pubkey, reason string) error {
 	}
 	defer f.Close()
 
-	if _, err := fmt.Fprintf(f, "%s,%s\n", pubkey, reason); err != nil {
+	if _, err := fmt.Fprintf(f, "%s,\"%s\"\n", pubkey, reason); err != nil {
 		return fmt.Errorf("failed to write to %s: %w", PubkeysAllowedFile, err)
 	}
 	return nil

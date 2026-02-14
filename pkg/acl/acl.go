@@ -195,6 +195,18 @@ func (c *Controller) IsBlobBlocked(hash blossom.Hash) bool {
 	return c.blobsBlocked.Contains(hash.Hex())
 }
 
+// CanFallbackToRepository reports whether repository-based verification
+// should be attempted for the given pubkey. It returns true only when the
+// unknown pubkey policy is UseVertex and the pubkey is not blocked.
+func (c *Controller) CanFallbackToRepository(pubkey string) bool {
+	if c.config.UnknownPubkeyPolicy != UseVertex {
+		return false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return !c.pubkeysBlocked.Contains(pubkey)
+}
+
 // AllowedPubkeys returns a copy of the current allowed pubkeys list.
 func (c *Controller) AllowedPubkeys() []string {
 	c.mu.RLock()
