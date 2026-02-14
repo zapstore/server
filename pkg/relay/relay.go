@@ -279,6 +279,18 @@ func AuthorNotAllowed(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) e
 			return ErrEventPubkeyBlocked
 		}
 		if !allow {
+			// For App events with a repository tag, try to verify the pubkey via the repository's zapstore.yaml.
+			if e.Kind == events.KindApp {
+				if repo, ok := events.Find(e.Tags, "repository"); ok {
+					verified, err := acl.VerifyByRepository(ctx, e.PubKey, repo)
+					if err != nil {
+						slog.Error("relay: repository verification failed", "error", err, "pubkey", e.PubKey, "repository", repo)
+					}
+					if verified {
+						return nil
+					}
+				}
+			}
 			return ErrEventPubkeyBlocked
 		}
 		return nil
