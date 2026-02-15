@@ -3,6 +3,7 @@ package events
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
 )
@@ -60,7 +61,25 @@ func (a *Asset) Validate() error {
 	if err := ValidateHash(a.Hash); err != nil {
 		return fmt.Errorf("invalid SHA-256 hash in 'x' tag: %w", err)
 	}
+
+	if a.isAndroid() {
+		if a.VersionCode == "" {
+			return fmt.Errorf("missing or empty 'version_code' tag (required for Android)")
+		}
+		if len(a.APKCertificateHashes) == 0 {
+			return fmt.Errorf("missing 'apk_certificate_hash' tag (required for Android)")
+		}
+	}
 	return nil
+}
+
+func (a *Asset) isAndroid() bool {
+	for _, p := range a.Platforms {
+		if strings.HasPrefix(p, "android-") {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseAsset extracts a Asset from a nostr.Event.
