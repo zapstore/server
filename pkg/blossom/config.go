@@ -29,8 +29,10 @@ func NewConfig() Config {
 	return Config{
 		Port: "3335",
 		AllowedMedia: []string{
-			"application/vnd.android.package-archive",
-			"image/jpeg",
+		"application/vnd.android.package-archive",
+		"application/x-executable",
+		"application/x-mach-binary",
+		"image/jpeg",
 			"image/png",
 			"image/webp",
 			"image/gif",

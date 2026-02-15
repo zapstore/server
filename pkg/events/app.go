@@ -20,6 +20,8 @@ var PlatformIdentifiers = []string{
 	"darwin-x86_64",
 	"linux-aarch64",
 	"linux-x86_64",
+	"linux-armv7l",
+	"linux-riscv64",
 	"windows-aarch64",
 	"windows-x86_64",
 	"ios-arm64",
