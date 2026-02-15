@@ -63,27 +63,28 @@ func (f File) Validate() error {
 	if f.Version == "" {
 		return fmt.Errorf("missing 'version' tag")
 	}
-	if f.VersionCode == "" {
-		return fmt.Errorf("missing 'version_code' tag")
-	}
 
 	if len(f.Platforms) == 0 {
 		return fmt.Errorf("missing 'f' tags")
 	}
 	// Platform identifier validation removed for legacy migration compatibility
 
-	if f.APKSignatureHash == "" {
-		return fmt.Errorf("missing 'apk_signature_hash' tag")
-	}
-	if err := ValidateHash(f.APKSignatureHash); err != nil {
-		return fmt.Errorf("invalid APK signing certificate sha256 hash in 'apk_signature_hash' tag: %w", err)
-	}
-
-	if f.MinSDKVersion == "" {
-		return fmt.Errorf("missing 'min_sdk_version' tag")
-	}
-	if f.TargetSDKVersion == "" {
-		return fmt.Errorf("missing 'target_sdk_version' tag")
+	if f.MIME == "application/vnd.android.package-archive" {
+		if f.VersionCode == "" {
+			return fmt.Errorf("missing 'version_code' tag")
+		}
+		if f.APKSignatureHash == "" {
+			return fmt.Errorf("missing 'apk_signature_hash' tag")
+		}
+		if err := ValidateHash(f.APKSignatureHash); err != nil {
+			return fmt.Errorf("invalid APK signing certificate sha256 hash in 'apk_signature_hash' tag: %w", err)
+		}
+		if f.MinSDKVersion == "" {
+			return fmt.Errorf("missing 'min_sdk_version' tag")
+		}
+		if f.TargetSDKVersion == "" {
+			return fmt.Errorf("missing 'target_sdk_version' tag")
+		}
 	}
 	return nil
 }
