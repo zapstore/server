@@ -15,6 +15,7 @@ import (
 	"github.com/pippellia-btc/rely"
 	sqlite "github.com/vertex-lab/nostr-sqlite"
 	"github.com/zapstore/server/pkg/acl"
+	"github.com/zapstore/server/pkg/analytics"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/rate"
 )
@@ -40,6 +41,7 @@ func Setup(
 	limiter rate.Limiter,
 	acl *acl.Controller,
 	store *sqlite.Store,
+	analytics *analytics.Engine,
 ) (*rely.Relay, error) {
 
 	relay := rely.NewRelay(
@@ -76,7 +78,7 @@ func Setup(
 	)
 
 	relay.On.Event = Save(store)
-	relay.On.Req = Query(store)
+	relay.On.Req = Query(store, analytics)
 	return relay, nil
 }
 
@@ -102,11 +104,19 @@ func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
 	}
 }
 
-func Query(store *sqlite.Store) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
-	return func(ctx context.Context, _ rely.Client, _ string, filters nostr.Filters) ([]nostr.Event, error) {
+func Query(store *sqlite.Store, analytics *analytics.Engine) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
+	return func(ctx context.Context, _ rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		return store.Query(ctx, filters...)
+
+		events, err := store.Query(ctx, filters...)
+		if err != nil {
+			slog.Error("relay: failed to query events", "error", err, "filters", filters)
+			return nil, err
+		}
+
+		analytics.RecordImpressions(id, filters, events)
+		return events, nil
 	}
 }
 

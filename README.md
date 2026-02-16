@@ -78,7 +78,8 @@ On first run, the server creates the following structure:
 $SYSTEM_DIRECTORY_PATH/
 ├── data/
 │   ├── relay.db      # SQLite database for relay events
-│   └── blossom.db    # SQLite database for blob metadata
+│   ├── blossom.db    # SQLite database for blob metadata
+│   └── analytics.db  # SQLite database for analytics
 └── acl/
     ├── pubkeys_allowed.csv
     ├── pubkeys_blocked.csv

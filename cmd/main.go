@@ -10,12 +10,13 @@ import (
 	"syscall"
 
 	"github.com/zapstore/server/pkg/acl"
+	"github.com/zapstore/server/pkg/analytics"
 	"github.com/zapstore/server/pkg/blossom"
-	blossomstore "github.com/zapstore/server/pkg/blossom/store"
+	blobstore "github.com/zapstore/server/pkg/blossom/store"
 	"github.com/zapstore/server/pkg/config"
 	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
-	relaystore "github.com/zapstore/server/pkg/relay/store"
+	eventstore "github.com/zapstore/server/pkg/relay/store"
 )
 
 func main() {
@@ -35,42 +36,68 @@ func main() {
 	logger.Info("-------------------server startup-------------------")
 	defer logger.Info("-------------------server shutdown-------------------")
 
+	// Step 1.
+	// Initialize directory and databases
 	dataDir := filepath.Join(config.Sys.Dir, "data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		panic(err)
 	}
 
-	rstore, err := relaystore.New(filepath.Join(dataDir, "relay.db"))
+	rstore, err := eventstore.New(filepath.Join(dataDir, "relay.db"))
 	if err != nil {
 		panic(err)
 	}
 	defer rstore.Close()
 
-	bstore, err := blossomstore.New(filepath.Join(dataDir, "blossom.db"))
+	bstore, err := blobstore.New(filepath.Join(dataDir, "blossom.db"))
 	if err != nil {
 		panic(err)
 	}
 	defer bstore.Close()
 
-	limiter := rate.NewLimiter(config.Rate)
+	path := filepath.Join(dataDir, "analytics.db")
+	analytics, err := analytics.NewEngine(config.Analytics, path, logger)
+	if err != nil {
+		panic(err)
+	}
+	defer analytics.Close()
 
+	// Step 2.
+	// Initialize rate limiter and ACL
+	limiter := rate.NewLimiter(config.Limiter)
 	aclDir := filepath.Join(config.Sys.Dir, "acl")
+
 	acl, err := acl.New(config.ACL, aclDir, logger)
 	if err != nil {
 		panic(err)
 	}
 	defer acl.Close()
 
-	relay, err := relay.Setup(config.Relay, limiter, acl, rstore)
+	// Step 3.
+	// Setup relay and blossom by passing dependencies
+	relay, err := relay.Setup(
+		config.Relay,
+		limiter,
+		acl,
+		rstore,
+		analytics,
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	blossom, err := blossom.Setup(config.Blossom, limiter, acl, bstore)
+	blossom, err := blossom.Setup(
+		config.Blossom,
+		limiter,
+		acl,
+		bstore,
+	)
 	if err != nil {
 		panic(err)
 	}
 
+	// Step 4.
+	// Run everything
 	exit := make(chan error, 2)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
