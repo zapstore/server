@@ -23,7 +23,7 @@ import (
 
 type Config struct {
 	Sys       SystemConfig
-	Rate      rate.Config
+	Limiter   rate.Config
 	ACL       acl.Config
 	Analytics analytics.Config
 	Relay     relay.Config
@@ -66,7 +66,7 @@ func Load() (Config, error) {
 func New() Config {
 	return Config{
 		Sys:       NewSystemConfig(),
-		Rate:      rate.NewConfig(),
+		Limiter:   rate.NewConfig(),
 		ACL:       acl.NewConfig(),
 		Analytics: analytics.NewConfig(),
 		Relay:     relay.NewConfig(),
@@ -81,7 +81,7 @@ func (c Config) Validate() error {
 	if err := c.ACL.Validate(); err != nil {
 		return fmt.Errorf("acl: %w", err)
 	}
-	if err := c.Rate.Validate(); err != nil {
+	if err := c.Limiter.Validate(); err != nil {
 		return fmt.Errorf("rate: %w", err)
 	}
 	if err := c.Analytics.Validate(); err != nil {
@@ -100,7 +100,7 @@ func (c Config) String() string {
 	var b strings.Builder
 	b.WriteString(c.Sys.String())
 	b.WriteByte('\n')
-	b.WriteString(c.Rate.String())
+	b.WriteString(c.Limiter.String())
 	b.WriteByte('\n')
 	b.WriteString(c.ACL.String())
 	b.WriteByte('\n')
