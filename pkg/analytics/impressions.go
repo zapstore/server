@@ -12,22 +12,30 @@ import (
 // Impression of an app
 type Impression struct {
 	AppID  string
-	Day    string // Day the impression was made, formatted as "YYYY-MM-DD"
-	Source ImpressionSource
-	Type   ImpressionType
+	Day    Day // formatted as "YYYY-MM-DD"
+	Source Source
+	Type   Type
+}
+
+// Day represents the day the impression was made, formatted as "YYYY-MM-DD".
+type Day string
+
+// Today returns the current day formatted as "YYYY-MM-DD".
+func Today() Day {
+	return Day(time.Now().Format("2006-01-02"))
 }
 
 // Source represents where the impression was made.
-type ImpressionSource string
+type Source string
 
 const (
-	SourceApp     ImpressionSource = "app"
-	SourceWeb     ImpressionSource = "web"
-	SourceUnknown ImpressionSource = "unknown"
+	SourceApp     Source = "app"
+	SourceWeb     Source = "web"
+	SourceUnknown Source = "unknown"
 )
 
 // ExtractSource from the REQ id.
-func extractSource(id string) ImpressionSource {
+func extractSource(id string) Source {
 	switch {
 	case strings.HasPrefix(id, "app-"):
 		return SourceApp
@@ -40,18 +48,18 @@ func extractSource(id string) ImpressionSource {
 
 // Type represents the type of impression, which is determined by the REQ.
 // For example, a "detail" impression is made when the client requests kind = 32267 (app), 'd' = <app_id>.
-type ImpressionType string
+type Type string
 
 const (
-	TypeFeed         ImpressionType = "feed"
-	TypeDetail       ImpressionType = "detail"
-	TypeSearch       ImpressionType = "search"
-	TypeStack        ImpressionType = "stack"
-	TypeUndetermined ImpressionType = "undetermined"
+	TypeFeed         Type = "feed"
+	TypeDetail       Type = "detail"
+	TypeSearch       Type = "search"
+	TypeStack        Type = "stack"
+	TypeUndetermined Type = "undetermined"
 )
 
-// determineType returns the filter ImpressionType.
-func determineType(filter nostr.Filter) ImpressionType {
+// determineType returns the filter Type.
+func determineType(filter nostr.Filter) Type {
 	hasApp := slices.Contains(filter.Kinds, eventPkg.KindApp)
 	hasStack := slices.Contains(filter.Kinds, eventPkg.KindAppSet)
 
@@ -77,8 +85,8 @@ func determineType(filter nostr.Filter) ImpressionType {
 
 // NewImpressions creates the impressions from the REQ id, filters and returned events.
 func NewImpressions(id string, filters nostr.Filters, events []nostr.Event) []Impression {
+	day := Today()
 	source := extractSource(id)
-	day := time.Now().Format("2006-01-02")
 	impressions := make([]Impression, 0, len(events))
 
 	for _, f := range filters {
