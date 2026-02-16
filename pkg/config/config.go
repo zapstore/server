@@ -55,11 +55,7 @@ func (c SystemConfig) String() string {
 func Load() (Config, error) {
 	config := New()
 	if err := env.Parse(&config); err != nil {
-		return Config{}, fmt.Errorf("failed to parse config: %w", err)
-	}
-
-	if err := config.Validate(); err != nil {
-		return Config{}, fmt.Errorf("failed to validate config: %w", err)
+		return Config{}, fmt.Errorf("failed to load config: %w", err)
 	}
 	return config, nil
 }

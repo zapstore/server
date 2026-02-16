@@ -26,6 +26,10 @@ func main() {
 		panic(err)
 	}
 
+	if err := config.Validate(); err != nil {
+		panic(err)
+	}
+
 	logger := slog.Default()
 	logger.Info("-------------------server startup-------------------")
 	defer logger.Info("-------------------server shutdown-------------------")
