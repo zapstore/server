@@ -121,11 +121,13 @@ func (e *Engine) run() {
 			return
 
 		case <-ticker.C:
+			e.log.Debug("analytics: flushing on interval")
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
 
 		case impression := <-e.impressions:
+			e.log.Debug("analytics: received impression")
 			e.pending[impression]++
 			if len(e.pending) >= e.config.FlushSize {
 				if err := e.flushImpressions(); err != nil {
