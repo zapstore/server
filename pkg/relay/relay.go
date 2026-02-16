@@ -45,6 +45,7 @@ func Setup(
 	relay := rely.NewRelay(
 		rely.WithAuthURL(config.Hostname),
 		rely.WithInfo(config.Info.NIP11()),
+		rely.WithQueueCapacity(config.QueueCapacity),
 		rely.WithMaxMessageSize(config.MaxMessageBytes),
 		rely.WithClientResponseLimit(config.ResponseLimit),
 	)

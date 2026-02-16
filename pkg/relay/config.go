@@ -18,6 +18,10 @@ type Config struct {
 	// Port is the port the relay will listen on. Default is "3334".
 	Port string `env:"RELAY_PORT"`
 
+	// QueueCapacity is the maximum number of events that can be queued for processing.
+	// Default is 1000.
+	QueueCapacity int `env:"RELAY_QUEUE_CAPACITY"`
+
 	// MaxMessageBytes is the maximum size of a message that can be sent to the relay.
 	// Default is 500_000 (0.5MB).
 	MaxMessageBytes int64 `env:"RELAY_MAX_MESSAGE_BYTES"`
@@ -41,6 +45,7 @@ type Config struct {
 func NewConfig() Config {
 	return Config{
 		Port:            "3334",
+		QueueCapacity:   1000,
 		MaxMessageBytes: 500_000,
 		MaxReqFilters:   50,
 		ResponseLimit:   200,
@@ -66,6 +71,9 @@ func (c Config) Validate() error {
 	}
 	if c.Port == "" {
 		return errors.New("port is not set")
+	}
+	if c.QueueCapacity <= 0 {
+		return errors.New("queue capacity must be greater than 0")
 	}
 	if c.MaxMessageBytes <= 0 {
 		return errors.New("max message bytes must be greater than 0")
@@ -147,11 +155,12 @@ func (c Config) String() string {
 	return fmt.Sprintf("Relay:\n"+
 		"\tHostname: %s\n"+
 		"\tPort: %s\n"+
+		"\tQueue Capacity: %d\n"+
 		"\tMax Message Bytes: %d\n"+
 		"\tMax REQ Filters: %d\n"+
 		"\tResponse Limit: %d\n"+
 		"\tAllowed Kinds: %v\n"+
 		c.Info.String(),
-		c.Hostname, c.Port, c.MaxMessageBytes, c.MaxReqFilters, c.ResponseLimit, c.AllowedKinds,
+		c.Hostname, c.Port, c.QueueCapacity, c.MaxMessageBytes, c.MaxReqFilters, c.ResponseLimit, c.AllowedKinds,
 	)
 }
