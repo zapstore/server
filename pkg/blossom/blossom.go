@@ -151,13 +151,15 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTim
 		}
 
 		// upload to Bunny directly, enforcing the stall timeout to prevent clients from uploading too slowly.
-		ctx, cancel := context.WithCancel(r.Context())
-		defer cancel()
+		ctx, cancel := context.WithCancelCause(r.Context())
+		defer cancel(nil)
 
 		reader := &stallReader{
 			data:    data,
-			timer:   time.AfterFunc(stallTimeout, cancel),
 			timeout: stallTimeout,
+			timer: time.AfterFunc(stallTimeout, func() {
+				cancel(fmt.Errorf("stalled longer than %v", stallTimeout))
+			}),
 		}
 		defer reader.timer.Stop()
 
