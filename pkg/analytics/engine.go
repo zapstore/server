@@ -3,23 +3,32 @@
 package analytics
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 //go:embed schema.sql
 var schema string
 
 // Engine is the heart of the analytics system. It's responsible for processing data
-// and storing it in the database periodically.
+// and saving it in the database on periodic and bounded batches.
 type Engine struct {
-	db          *sql.DB
+	db *sql.DB
+
 	impressions chan Impression
-	log         *slog.Logger
+	pending     map[Impression]int // Impression --> count
 
 	config Config
+	log    *slog.Logger
+	wg     sync.WaitGroup
 	done   chan struct{}
 }
 
@@ -30,14 +39,21 @@ func NewEngine(c Config, path string, logger *slog.Logger) (*Engine, error) {
 		return nil, fmt.Errorf("analytics: failed to open database: %w", err)
 	}
 
-	e := &Engine{
+	engine := &Engine{
 		db:          db,
+		impressions: make(chan Impression, c.QueueSize),
+		pending:     make(map[Impression]int),
 		config:      c,
-		impressions: make(chan Impression, 1000),
+		log:         logger,
 		done:        make(chan struct{}),
 	}
-	//go e.run()
-	return e, nil
+
+	engine.wg.Add(1)
+	go func() {
+		defer engine.wg.Done()
+		engine.run()
+	}()
+	return engine, nil
 }
 
 func newDB(path string) (*sql.DB, error) {
@@ -63,69 +79,147 @@ func newDB(path string) (*sql.DB, error) {
 	return db, nil
 }
 
-// // run reads impressions from the channel, aggregates them, and flushes them to the database periodically.
-// func (e *Engine) run() {
-// 	ticker := time.NewTicker(e.config.FlushInterval)
-// 	defer ticker.Stop()
+// Close closes the engine.
+// It will force [Engine.run] to flush any pending data, close the database connection and return.
+func (e *Engine) Close() {
+	close(e.done)
+	e.wg.Wait()
+}
 
-// 	for {
-// 		select {
-// 		case <-e.done:
-// 			e.Flush()
-// 			return
+// RecordImpressions records the impressions derived from the given REQ (id, filters),
+// and the nostr events served in response to it.
+func (e *Engine) RecordImpressions(id string, filters nostr.Filters, events []nostr.Event) {
+	impressions := NewImpressions(id, filters, events)
+	for i, impression := range impressions {
+		select {
+		case e.impressions <- impression:
+		default:
+			dropped := len(impressions) - i
+			e.log.Warn("failed to record impressions", "error", "channel is full", "dropped", dropped)
+			return
+		}
+	}
+}
 
-// 		case impression := <-e.impressions:
-// 			key := impressionKey{
-// 				appID:  ev.appID,
-// 				date:   ev.date,
-// 				source: ev.source,
-// 				kind:   ev.kind,
-// 			}
-// 			agg[key] += ev.count
-// 			pending++
+func (e *Engine) run() {
+	ticker := time.NewTicker(e.config.FlushInterval)
+	defer ticker.Stop()
 
-// 			if e.cfg.MaxBatchSize > 0 && pending >= e.cfg.MaxBatchSize {
-// 				flush()
-// 			}
+	for {
+		select {
+		case <-e.done:
+			e.Drain()
+			if err := e.flushAll(); err != nil {
+				e.log.Error("analytics: failed to flush", "err", err)
+			}
 
-// 		case <-ticker.C:
-// 			e.Flush()
-// 		}
-// 	}
-// }
+			if err := e.db.Close(); err != nil {
+				e.log.Error("analytics: failed to close database", "err", err)
+			}
 
-// func (e *Engine) RecordImpression(id string, filters nostr.Filters) {
+			e.log.Info("analytics: flushed all pending data")
+			return
 
-// }
+		case <-ticker.C:
+			if err := e.flushAll(); err != nil {
+				e.log.Error("analytics: failed to flush", "err", err)
+			}
 
-// func (e *Engine) flushImpressions(ctx context.Context, agg map[impressionKey]int) error {
-// 	tx, err := e.db.BeginTx(ctx, nil)
-// 	if err != nil {
-// 		return err
-// 	}
+		case impression := <-e.impressions:
+			e.pending[impression]++
+			if len(e.pending) >= e.config.FlushSize {
+				if err := e.flushImpressions(); err != nil {
+					e.log.Error("analytics: failed to flush", "err", err)
+				}
+			}
+		}
+	}
+}
 
-// 	stmt, err := tx.PrepareContext(ctx, `
-// 		INSERT INTO impressions (app_id, day, source, type, count)
-// 		VALUES (?, ?, ?, ?, ?)
-// 		ON CONFLICT(app_id, day, source, type)
-// 		DO UPDATE SET count = impressions.count + excluded.count
-// 	`)
-// 	if err != nil {
-// 		_ = tx.Rollback()
-// 		return err
-// 	}
-// 	defer stmt.Close()
+// Drain drains all the Engine's channels on a best effort basis, meaning the first time
+// the channel is empty, the function returns.
+func (e *Engine) Drain() {
+	for {
+		select {
+		case impression := <-e.impressions:
+			e.pending[impression]++
 
-// 	for k, v := range agg {
-// 		if v <= 0 {
-// 			continue
-// 		}
-// 		dateStr := k.date.Format("2006-01-02")
-// 		if _, err := stmt.ExecContext(ctx, k.appID, dateStr, string(k.source), string(k.kind), v); err != nil {
-// 			_ = tx.Rollback()
-// 			return err
-// 		}
-// 	}
+		default:
+			return
+		}
+	}
+}
 
-// 	return tx.Commit()
-// }
+// flushAll commits any pending data to the database.
+func (e *Engine) flushAll() error {
+	for {
+		if len(e.pending) == 0 {
+			break
+		}
+
+		if err := e.flushImpressions(); err != nil {
+			return fmt.Errorf("failed to flush impressions: %w", err)
+		}
+	}
+	return nil
+}
+
+// flushImpressions commits up to [Config.FlushSize] impressions to the database.
+// The operation is guaranteed to terminate within [Config.FlushTimeout].
+func (e *Engine) flushImpressions() error {
+	if len(e.pending) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), e.config.FlushTimeout)
+	defer cancel()
+
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO impressions (app_id, day, source, type, count)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(app_id, day, source, type)
+		DO UPDATE SET count = impressions.count + excluded.count
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	flushed := make([]Impression, 0, e.config.FlushSize)
+	for impression, count := range e.pending {
+		if count <= 0 {
+			continue
+		}
+
+		if _, err := stmt.ExecContext(
+			ctx,
+			impression.AppID,
+			string(impression.Day),
+			string(impression.Source),
+			string(impression.Type),
+			count,
+		); err != nil {
+			return fmt.Errorf("failed to execute statement: %w", err)
+		}
+
+		flushed = append(flushed, impression)
+		if len(flushed) >= e.config.FlushSize {
+			break
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	for _, f := range flushed {
+		delete(e.pending, f)
+	}
+	return nil
+}

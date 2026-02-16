@@ -7,17 +7,26 @@ import (
 )
 
 type Config struct {
-	// FlushInterval is the interval at which the analytics engine flushes data to the database. Default is 1 minute.
+	// FlushInterval is the interval at which the analytics engine flushes data to the database. Default is 5 minutes.
 	FlushInterval time.Duration `env:"ANALYTICS_FLUSH_INTERVAL"`
 
-	// MaxBatchSize is the maximum number of events that can be batched before flushing to the database. Default is 100.
-	MaxBatchSize int `env:"ANALYTICS_MAX_BATCH_SIZE"`
+	// FlushTimeout is the maximum time allowed for a flush operation to complete. Default is 10 seconds.
+	FlushTimeout time.Duration `env:"ANALYTICS_FLUSH_TIMEOUT"`
+
+	// FlushSize is the maximum number of events that can be flushed to the database in a single transaction. Default is 1000.
+	FlushSize int `env:"ANALYTICS_FLUSH_SIZE"`
+
+	// QueueSize is the maximum number of events that can be queued in memory.
+	// If more events are queued, they will be dropped. Default is 100_000.
+	QueueSize int `env:"ANALYTICS_QUEUE_SIZE"`
 }
 
 func NewConfig() Config {
 	return Config{
-		FlushInterval: time.Minute,
-		MaxBatchSize:  100,
+		FlushInterval: 5 * time.Minute,
+		FlushTimeout:  10 * time.Second,
+		FlushSize:     1000,
+		QueueSize:     100_000,
 	}
 }
 
@@ -28,8 +37,14 @@ func (c Config) Validate() error {
 	if c.FlushInterval > time.Hour {
 		return errors.New("flush interval must be less than 1h to avoid data loss in case of a server crash or restart")
 	}
-	if c.MaxBatchSize <= 0 {
-		return errors.New("max batch size must be greater than 0")
+	if c.FlushTimeout <= time.Second {
+		return errors.New("flush timeout must be greater than 1s to function reliably")
+	}
+	if c.FlushSize <= 0 {
+		return errors.New("flush size must be greater than 0")
+	}
+	if c.QueueSize <= 0 {
+		return errors.New("queue size must be greater than 0")
 	}
 	return nil
 }
@@ -37,7 +52,11 @@ func (c Config) Validate() error {
 func (c Config) String() string {
 	return fmt.Sprintf("Analytics:\n"+
 		"\tFlush Interval: %s\n"+
-		"\tMax Batch Size: %d\n",
+		"\tFlush Timeout: %s\n"+
+		"\tFlush Size: %d\n"+
+		"\tQueue Size: %d\n",
 		c.FlushInterval,
-		c.MaxBatchSize)
+		c.FlushTimeout,
+		c.FlushSize,
+		c.QueueSize)
 }
