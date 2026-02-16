@@ -10,21 +10,24 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/zapstore/server/pkg/acl"
+	"github.com/zapstore/server/pkg/analytics"
 	"github.com/zapstore/server/pkg/blossom"
 	"github.com/zapstore/server/pkg/rate"
 	"github.com/zapstore/server/pkg/relay"
 )
 
 type Config struct {
-	Sys     SystemConfig
-	Rate    rate.Config
-	ACL     acl.Config
-	Relay   relay.Config
-	Blossom blossom.Config
+	Sys       SystemConfig
+	Rate      rate.Config
+	ACL       acl.Config
+	Analytics analytics.Config
+	Relay     relay.Config
+	Blossom   blossom.Config
 }
 
 type SystemConfig struct {
@@ -62,11 +65,12 @@ func Load() (Config, error) {
 
 func New() Config {
 	return Config{
-		Sys:     NewSystemConfig(),
-		Rate:    rate.NewConfig(),
-		ACL:     acl.NewConfig(),
-		Relay:   relay.NewConfig(),
-		Blossom: blossom.NewConfig(),
+		Sys:       NewSystemConfig(),
+		Rate:      rate.NewConfig(),
+		ACL:       acl.NewConfig(),
+		Analytics: analytics.NewConfig(),
+		Relay:     relay.NewConfig(),
+		Blossom:   blossom.NewConfig(),
 	}
 }
 
@@ -80,6 +84,9 @@ func (c Config) Validate() error {
 	if err := c.Rate.Validate(); err != nil {
 		return fmt.Errorf("rate: %w", err)
 	}
+	if err := c.Analytics.Validate(); err != nil {
+		return fmt.Errorf("analytics: %w", err)
+	}
 	if err := c.Relay.Validate(); err != nil {
 		return fmt.Errorf("relay: %w", err)
 	}
@@ -89,10 +96,18 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) Print() {
-	fmt.Println(c.Sys)
-	fmt.Println(c.Rate)
-	fmt.Println(c.ACL)
-	fmt.Println(c.Relay)
-	fmt.Println(c.Blossom)
+func (c Config) String() string {
+	var b strings.Builder
+	b.WriteString(c.Sys.String())
+	b.WriteByte('\n')
+	b.WriteString(c.Rate.String())
+	b.WriteByte('\n')
+	b.WriteString(c.ACL.String())
+	b.WriteByte('\n')
+	b.WriteString(c.Analytics.String())
+	b.WriteByte('\n')
+	b.WriteString(c.Relay.String())
+	b.WriteByte('\n')
+	b.WriteString(c.Blossom.String())
+	return b.String()
 }
