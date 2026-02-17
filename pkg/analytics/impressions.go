@@ -34,8 +34,8 @@ const (
 	SourceUnknown Source = "unknown"
 )
 
-// ExtractSource from the REQ id.
-func extractSource(id string) Source {
+// ImpressionSource from the REQ id.
+func ImpressionSource(id string) Source {
 	switch {
 	case strings.HasPrefix(id, "app-"):
 		return SourceApp
@@ -58,8 +58,8 @@ const (
 	TypeUndetermined Type = "undetermined"
 )
 
-// determineType returns the filter Type.
-func determineType(filter nostr.Filter) Type {
+// ImpressionType returns the filter Type.
+func ImpressionType(filter nostr.Filter) Type {
 	hasApp := slices.Contains(filter.Kinds, eventPkg.KindApp)
 	hasStack := slices.Contains(filter.Kinds, eventPkg.KindAppSet)
 
@@ -86,11 +86,11 @@ func determineType(filter nostr.Filter) Type {
 // NewImpressions creates the impressions from the REQ id, filters and returned events.
 func NewImpressions(id string, filters nostr.Filters, events []nostr.Event) []Impression {
 	day := Today()
-	source := extractSource(id)
+	source := ImpressionSource(id)
 	impressions := make([]Impression, 0, len(events))
 
 	for _, f := range filters {
-		typ := determineType(f)
+		typ := ImpressionType(f)
 		if typ == TypeUndetermined {
 			continue
 		}

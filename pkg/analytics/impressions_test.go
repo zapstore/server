@@ -49,7 +49,7 @@ func TestDetermineType(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := determineType(test.filter); got != test.want {
+			if got := ImpressionType(test.filter); got != test.want {
 				t.Errorf("determineType() = %v, want %v", got, test.want)
 			}
 		})
