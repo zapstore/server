@@ -91,6 +91,7 @@ func main() {
 		limiter,
 		acl,
 		bstore,
+		analytics,
 	)
 	if err != nil {
 		panic(err)

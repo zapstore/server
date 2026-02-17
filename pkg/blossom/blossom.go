@@ -16,6 +16,7 @@ import (
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/zapstore/server/pkg/acl"
+	"github.com/zapstore/server/pkg/analytics"
 	"github.com/zapstore/server/pkg/blossom/bunny"
 	"github.com/zapstore/server/pkg/blossom/store"
 	"github.com/zapstore/server/pkg/rate"
@@ -33,6 +34,7 @@ func Setup(
 	limiter rate.Limiter,
 	acl *acl.Controller,
 	store *store.Store,
+	analytics *analytics.Engine,
 ) (*blossy.Server, error) {
 
 	bunny := bunny.NewClient(config.Bunny)
@@ -63,7 +65,7 @@ func Setup(
 	)
 
 	blossom.On.Check = Check(store)
-	blossom.On.Download = Download(store, bunny)
+	blossom.On.Download = Download(store, bunny, analytics)
 	blossom.On.Upload = Upload(store, bunny, limiter, config.StallTimeout)
 	return blossom, nil
 }
@@ -87,7 +89,7 @@ func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string
 	}
 }
 
-func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash blossom.Hash, _ string) (blossy.BlobDelivery, *blossom.Error) {
+func Download(db *store.Store, client bunny.Client, analytics *analytics.Engine) func(r blossy.Request, hash blossom.Hash, _ string) (blossy.BlobDelivery, *blossom.Error) {
 	return func(r blossy.Request, hash blossom.Hash, _ string) (blossy.BlobDelivery, *blossom.Error) {
 
 		// In the Bunny CDN files are defined by their name (hash) and extension (ext).
@@ -105,6 +107,7 @@ func Download(db *store.Store, client bunny.Client) func(r blossy.Request, hash 
 			return nil, ErrInternal
 		}
 
+		analytics.RecordDownload(r, hash)
 		url := client.CDNURL(BlobPath(hash, meta.Type))
 		return blossy.Redirect(url, http.StatusTemporaryRedirect), nil
 	}
