@@ -51,7 +51,7 @@ type Response struct {
 // Allow returns whether the pubkey is above the threshold.
 // It returns an error if the request to the relay fails.
 func (f Filter) Allow(ctx context.Context, pubkey string) (bool, error) {
-	if f.config.Algorithm.Threshold == 0 {
+	if f.config.Algorithm.Threshold <= 0 {
 		return true, nil
 	}
 
