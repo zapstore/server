@@ -11,30 +11,27 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 )
 
 // Locator represents a geo-locator, returning the country code for a given IP address.
+// All methods are safe for concurrent use, but only on Unix file systems because of os.Rename properties.
 type Locator struct {
+	mu   sync.RWMutex
 	db   *maxminddb.Reader
 	http *http.Client
 
 	path   string
 	config Config
-	log    *slog.Logger
 }
 
-func NewLocator(c Config, path string, log *slog.Logger) (*Locator, error) {
-	if log == nil {
-		return nil, errors.New("logger is required")
-	}
-
+func NewLocator(c Config, path string) (*Locator, error) {
 	locator := &Locator{
 		http:   &http.Client{Timeout: c.DownloadTimeout},
 		path:   path,
 		config: c,
-		log:    log,
 	}
 
 	_, err := os.Stat(path)
@@ -57,12 +54,12 @@ func NewLocator(c Config, path string, log *slog.Logger) (*Locator, error) {
 
 // Close closes the geolocation database.
 func (l *Locator) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.db.Close()
 }
 
 // LookupCountry looks up the country ISO code of the given IP address.
-// If the Engine geolocation is not enabled or broken, the function returns an empty string.
-// Any error will be logged and the ISO code will be returned as an empty string.
 func (l *Locator) LookupCountry(ip net.IP) (string, error) {
 	if ip == nil {
 		return "", errors.New("failed to lookup country: ip is nil")
@@ -74,11 +71,34 @@ func (l *Locator) LookupCountry(ip net.IP) (string, error) {
 	}
 	addr = addr.Unmap()
 
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
 	var country string
 	if err := l.db.Lookup(addr).DecodePath(&country, "country", "iso_code"); err != nil {
 		return "", fmt.Errorf("failed to lookup country: %w", err)
 	}
 	return country, nil
+}
+
+// Refresh re-downloads the geolocation database and swaps it atomically.
+// It is safe to call concurrently with LookupCountry.
+func (l *Locator) Refresh(ctx context.Context) error {
+	if err := l.downloadDB(ctx); err != nil {
+		return err
+	}
+
+	db, err := maxminddb.Open(l.path)
+	if err != nil {
+		return fmt.Errorf("failed to open refreshed geolocation database at %q: %w", l.path, err)
+	}
+
+	l.mu.Lock()
+	old := l.db
+	l.db = db
+	l.mu.Unlock()
+
+	return old.Close()
 }
 
 // downloadDB downloads the .mmdb file from the specified endpoint and
@@ -121,8 +141,8 @@ func (l *Locator) downloadDB(ctx context.Context) error {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
-	if n > cl {
-		l.log.Warn("geo: bytes received exceed Content-Length", "content_length", cl, "received", n)
+	if cl != -1 && n > cl {
+		slog.Warn("geo: bytes received exceed Content-Length", "content_length", cl, "received", n)
 	}
 
 	if err := tmp.Close(); err != nil {
