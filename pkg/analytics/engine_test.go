@@ -91,7 +91,7 @@ func TestFlushImpressions(t *testing.T) {
 			for _, imp := range test.impressions {
 				engine.impressions <- imp
 			}
-			engine.Drain()
+			engine.drain()
 
 			if err := engine.flushImpressions(); err != nil {
 				t.Fatalf("flushImpressions: %v", err)
@@ -192,7 +192,7 @@ func TestFlushDownloads(t *testing.T) {
 			for _, dl := range test.downloads {
 				engine.downloads <- dl
 			}
-			engine.Drain()
+			engine.drain()
 
 			if err := engine.flushDownloads(); err != nil {
 				t.Fatalf("flushDownloads: %v", err)

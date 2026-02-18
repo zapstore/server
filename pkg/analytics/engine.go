@@ -99,7 +99,7 @@ func (e *Engine) Pending() int {
 
 // Drain drains all the Engine's channels on a best effort basis, meaning the first time
 // all channels are empty, the function returns.
-func (e *Engine) Drain() {
+func (e *Engine) drain() {
 	for {
 		select {
 		case impression := <-e.impressions:
@@ -146,7 +146,7 @@ func (e *Engine) run() {
 	for {
 		select {
 		case <-e.done:
-			e.Drain()
+			e.drain()
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
