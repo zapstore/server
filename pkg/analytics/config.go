@@ -40,6 +40,9 @@ func (c Config) Validate() error {
 	if c.FlushTimeout <= time.Second {
 		return errors.New("flush timeout must be greater than 1s to function reliably")
 	}
+	if c.FlushTimeout >= c.FlushInterval {
+		return errors.New("flush timeout must be less than flush interval to function as intended")
+	}
 	if c.FlushSize <= 0 {
 		return errors.New("flush size must be greater than 0")
 	}

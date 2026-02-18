@@ -87,6 +87,7 @@ func TestFlushImpressions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewEngine: %v", err)
 			}
+			defer engine.Close()
 
 			for _, imp := range test.impressions {
 				engine.impressions <- imp
@@ -188,6 +189,7 @@ func TestFlushDownloads(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewEngine: %v", err)
 			}
+			defer engine.Close()
 
 			for _, dl := range test.downloads {
 				engine.downloads <- dl
@@ -294,12 +296,27 @@ func normalizeDay(day string) string {
 
 func sortRows(rows []impressionRow) {
 	slices.SortFunc(rows, func(r1, r2 impressionRow) int {
-		return cmp.Compare(r1.AppID, r2.AppID)
+		if c := cmp.Compare(r1.AppID, r2.AppID); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(string(r1.Day), string(r2.Day)); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(string(r1.Source), string(r2.Source)); c != 0 {
+			return c
+		}
+		return cmp.Compare(string(r1.Type), string(r2.Type))
 	})
 }
 
 func sortDownloadRows(rows []downloadRow) {
 	slices.SortFunc(rows, func(r1, r2 downloadRow) int {
-		return cmp.Compare(string(r1.Hash.Hex()), string(r2.Source))
+		if c := cmp.Compare(r1.Hash.Hex(), r2.Hash.Hex()); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(string(r1.Day), string(r2.Day)); c != 0 {
+			return c
+		}
+		return cmp.Compare(string(r1.Source), string(r2.Source))
 	})
 }

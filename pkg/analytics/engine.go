@@ -92,11 +92,6 @@ func (e *Engine) Close() {
 	e.wg.Wait()
 }
 
-// Pending returns the number of pending data items.
-func (e *Engine) Pending() int {
-	return len(e.pendingImpressions) + len(e.pendingDownloads)
-}
-
 // Drain drains all the Engine's channels on a best effort basis, meaning the first time
 // all channels are empty, the function returns.
 func (e *Engine) drain() {
@@ -160,6 +155,7 @@ func (e *Engine) run() {
 
 		case <-ticker.C:
 			e.log.Debug("analytics: flushing on interval")
+			e.drain()
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
@@ -190,7 +186,7 @@ func (e *Engine) run() {
 // flushAll commits any pending data to the database.
 func (e *Engine) flushAll() error {
 	for {
-		if e.Pending() == 0 {
+		if len(e.pendingImpressions)+len(e.pendingDownloads) == 0 {
 			break
 		}
 

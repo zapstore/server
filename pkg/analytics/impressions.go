@@ -22,7 +22,7 @@ type Day string
 
 // Today returns the current day formatted as "YYYY-MM-DD".
 func Today() Day {
-	return Day(time.Now().Format("2006-01-02"))
+	return Day(time.Now().UTC().Format("2006-01-02"))
 }
 
 // Source represents where the impression was made.
