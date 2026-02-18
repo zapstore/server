@@ -37,7 +37,7 @@ func main() {
 	defer logger.Info("-------------------server shutdown-------------------")
 
 	// Step 1.
-	// Initialize directory and databases
+	// Initialize databases
 	dataDir := filepath.Join(config.Sys.Dir, "data")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		panic(err)
@@ -55,13 +55,6 @@ func main() {
 	}
 	defer bstore.Close()
 
-	path := filepath.Join(dataDir, "analytics.db")
-	analytics, err := analytics.NewEngine(config.Analytics, path, logger)
-	if err != nil {
-		panic(err)
-	}
-	defer analytics.Close()
-
 	// Step 2.
 	// Initialize rate limiter and ACL
 	limiter := rate.NewLimiter(config.Limiter)
@@ -74,6 +67,24 @@ func main() {
 	defer acl.Close()
 
 	// Step 3.
+	// Initialize analytics engine
+	analyticsDir := filepath.Join(config.Sys.Dir, "analytics")
+	if err := os.MkdirAll(analyticsDir, 0755); err != nil {
+		panic(err)
+	}
+
+	paths := analytics.Paths{
+		DB:   filepath.Join(analyticsDir, "analytics.db"),
+		MMDB: filepath.Join(analyticsDir, "ip66.mmdb"),
+	}
+
+	analytics, err := analytics.NewEngine(config.Analytics, paths, logger)
+	if err != nil {
+		panic(err)
+	}
+	defer analytics.Close()
+
+	// Step 4.
 	// Setup relay and blossom by passing dependencies
 	relay, err := relay.Setup(
 		config.Relay,
@@ -97,7 +108,7 @@ func main() {
 		panic(err)
 	}
 
-	// Step 4.
+	// Step 5.
 	// Run everything
 	exit := make(chan error, 2)
 	wg := sync.WaitGroup{}

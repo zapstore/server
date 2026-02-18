@@ -39,6 +39,9 @@ go.work.sum
 # ACL files
 *.csv
 
+# MaxMind database
+*.mmdb
+
 # Build output
 build/
 

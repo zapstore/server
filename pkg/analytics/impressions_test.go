@@ -56,7 +56,7 @@ func TestDetermineType(t *testing.T) {
 }
 
 func TestNewImpressions(t *testing.T) {
-	day := Today()
+	day := today()
 
 	tests := []struct {
 		name    string
@@ -147,7 +147,7 @@ func TestNewImpressions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := NewImpressions(test.id, test.filters, test.events)
+			got := NewImpressions("", test.id, test.filters, test.events)
 			if !reflect.DeepEqual(got, test.want) {
 				t.Errorf("NewImpressions() = %v, want %v", got, test.want)
 			}

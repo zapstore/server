@@ -105,7 +105,7 @@ func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
 }
 
 func Query(store *sqlite.Store, analytics *analytics.Engine) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
-	return func(ctx context.Context, _ rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
+	return func(ctx context.Context, client rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
@@ -115,7 +115,7 @@ func Query(store *sqlite.Store, analytics *analytics.Engine) func(ctx context.Co
 			return nil, err
 		}
 
-		analytics.RecordImpressions(id, filters, events)
+		analytics.RecordImpressions(client, id, filters, events)
 		return events, nil
 	}
 }

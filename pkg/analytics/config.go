@@ -19,6 +19,9 @@ type Config struct {
 	// QueueSize is the maximum number of events that can be queued in memory.
 	// If more events are queued, they will be dropped. Default is 100_000.
 	QueueSize int `env:"ANALYTICS_QUEUE_SIZE"`
+
+	// GeoEnabled is a flag indicating whether geo-location (country code) should be collected and stored. Default is true.
+	GeoEnabled bool `env:"ANALYTICS_GEO_ENABLED"`
 }
 
 func NewConfig() Config {
@@ -27,6 +30,7 @@ func NewConfig() Config {
 		FlushTimeout:  10 * time.Second,
 		FlushSize:     1000,
 		QueueSize:     100_000,
+		GeoEnabled:    true,
 	}
 }
 
@@ -57,9 +61,11 @@ func (c Config) String() string {
 		"\tFlush Interval: %s\n"+
 		"\tFlush Timeout: %s\n"+
 		"\tFlush Size: %d\n"+
-		"\tQueue Size: %d\n",
+		"\tQueue Size: %d\n"+
+		"\tGeo Enabled: %t\n",
 		c.FlushInterval,
 		c.FlushTimeout,
 		c.FlushSize,
-		c.QueueSize)
+		c.QueueSize,
+		c.GeoEnabled)
 }

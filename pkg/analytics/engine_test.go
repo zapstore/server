@@ -28,11 +28,11 @@ func TestFlushImpressions(t *testing.T) {
 		{
 			name: "single impression",
 			impressions: []Impression{
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
 			},
 			want: []impressionRow{
 				{
-					Impression: Impression{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
+					Impression: Impression{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
 					Count:      1,
 				},
 			},
@@ -40,13 +40,13 @@ func TestFlushImpressions(t *testing.T) {
 		{
 			name: "duplicate impressions coalesced",
 			impressions: []Impression{
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceWeb, Type: TypeDetail},
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceWeb, Type: TypeDetail},
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceWeb, Type: TypeDetail},
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceWeb, Type: TypeDetail},
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceWeb, Type: TypeDetail},
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceWeb, Type: TypeDetail},
 			},
 			want: []impressionRow{
 				{
-					Impression: Impression{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceWeb, Type: TypeDetail},
+					Impression: Impression{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceWeb, Type: TypeDetail},
 					Count:      3,
 				},
 			},
@@ -54,23 +54,23 @@ func TestFlushImpressions(t *testing.T) {
 		{
 			name: "multiple impressions across keys",
 			impressions: []Impression{
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
-				{AppID: "com.example.app2", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
-				{AppID: "com.example.app1", Day: Day("2024-01-02"), Source: SourceApp, Type: TypeSearch}, // different
-				{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
-				{AppID: "com.example.app2", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app2", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app1", Day: "2024-01-02", Source: SourceApp, Type: TypeSearch}, // different
+				{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app2", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
 			},
 			want: []impressionRow{
 				{
-					Impression: Impression{AppID: "com.example.app1", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
+					Impression: Impression{AppID: "com.example.app1", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
 					Count:      2,
 				},
 				{
-					Impression: Impression{AppID: "com.example.app2", Day: Day("2024-01-01"), Source: SourceApp, Type: TypeFeed},
+					Impression: Impression{AppID: "com.example.app2", Day: "2024-01-01", Source: SourceApp, Type: TypeFeed},
 					Count:      2,
 				},
 				{
-					Impression: Impression{AppID: "com.example.app1", Day: Day("2024-01-02"), Source: SourceApp, Type: TypeSearch},
+					Impression: Impression{AppID: "com.example.app1", Day: "2024-01-02", Source: SourceApp, Type: TypeSearch},
 					Count:      1,
 				},
 			},
@@ -79,9 +79,12 @@ func TestFlushImpressions(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			config := NewConfig()
+			config.GeoEnabled = false
+
 			engine, err := NewEngine(
-				NewConfig(),
-				":memory:",
+				config,
+				Paths{DB: ":memory:"},
 				slog.Default(),
 			)
 			if err != nil {
@@ -103,8 +106,8 @@ func TestFlushImpressions(t *testing.T) {
 				t.Fatalf("fetchImpressions: %v", err)
 			}
 
-			sortRows(got)
-			sortRows(test.want)
+			sortImpressions(got)
+			sortImpressions(test.want)
 
 			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("rows mismatch\n got: %#v\nwant: %#v", got, test.want)
@@ -130,11 +133,11 @@ func TestFlushDownloads(t *testing.T) {
 		{
 			name: "single download",
 			downloads: []Download{
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceApp},
+				{Hash: h1, Day: "2024-01-01", Source: SourceApp},
 			},
 			want: []downloadRow{
 				{
-					Download: Download{Hash: h1, Day: Day("2024-01-01"), Source: SourceApp},
+					Download: Download{Hash: h1, Day: "2024-01-01", Source: SourceApp},
 					Count:    1,
 				},
 			},
@@ -142,13 +145,13 @@ func TestFlushDownloads(t *testing.T) {
 		{
 			name: "duplicate downloads coalesced",
 			downloads: []Download{
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceWeb},
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceWeb},
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceWeb},
+				{Hash: h1, Day: "2024-01-01", Source: SourceWeb},
+				{Hash: h1, Day: "2024-01-01", Source: SourceWeb},
+				{Hash: h1, Day: "2024-01-01", Source: SourceWeb},
 			},
 			want: []downloadRow{
 				{
-					Download: Download{Hash: h1, Day: Day("2024-01-01"), Source: SourceWeb},
+					Download: Download{Hash: h1, Day: "2024-01-01", Source: SourceWeb},
 					Count:    3,
 				},
 			},
@@ -156,23 +159,23 @@ func TestFlushDownloads(t *testing.T) {
 		{
 			name: "multiple downloads across keys",
 			downloads: []Download{
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceApp},
-				{Hash: h2, Day: Day("2024-01-01"), Source: SourceApp},
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceApp},
-				{Hash: h1, Day: Day("2024-01-01"), Source: SourceUnknown},
-				{Hash: h2, Day: Day("2024-01-01"), Source: SourceApp},
+				{Hash: h1, Day: "2024-01-01", Source: SourceApp},
+				{Hash: h2, Day: "2024-01-01", Source: SourceApp},
+				{Hash: h1, Day: "2024-01-01", Source: SourceApp},
+				{Hash: h1, Day: "2024-01-01", Source: SourceUnknown},
+				{Hash: h2, Day: "2024-01-01", Source: SourceApp},
 			},
 			want: []downloadRow{
 				{
-					Download: Download{Hash: h1, Day: Day("2024-01-01"), Source: SourceApp},
+					Download: Download{Hash: h1, Day: "2024-01-01", Source: SourceApp},
 					Count:    2,
 				},
 				{
-					Download: Download{Hash: h2, Day: Day("2024-01-01"), Source: SourceApp},
+					Download: Download{Hash: h2, Day: "2024-01-01", Source: SourceApp},
 					Count:    2,
 				},
 				{
-					Download: Download{Hash: h1, Day: Day("2024-01-01"), Source: SourceUnknown},
+					Download: Download{Hash: h1, Day: "2024-01-01", Source: SourceUnknown},
 					Count:    1,
 				},
 			},
@@ -181,9 +184,12 @@ func TestFlushDownloads(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			config := NewConfig()
+			config.GeoEnabled = false
+
 			engine, err := NewEngine(
-				NewConfig(),
-				":memory:",
+				config,
+				Paths{DB: ":memory:"},
 				slog.Default(),
 			)
 			if err != nil {
@@ -205,8 +211,8 @@ func TestFlushDownloads(t *testing.T) {
 				t.Fatalf("fetchDownloads: %v", err)
 			}
 
-			sortDownloadRows(got)
-			sortDownloadRows(test.want)
+			sortDownloads(got)
+			sortDownloads(test.want)
 
 			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("rows mismatch\n got: %v\nwant: %v", got, test.want)
@@ -216,7 +222,7 @@ func TestFlushDownloads(t *testing.T) {
 }
 
 func fetchImpressions(db *sql.DB) ([]impressionRow, error) {
-	rows, err := db.Query(`SELECT * FROM impressions`)
+	rows, err := db.Query(`SELECT app_id, app_pubkey, day, source, type, country_code, count FROM impressions`)
 	if err != nil {
 		return nil, err
 	}
@@ -225,23 +231,25 @@ func fetchImpressions(db *sql.DB) ([]impressionRow, error) {
 	var results []impressionRow
 	for rows.Next() {
 		var (
-			appID     string
-			appPubkey string
-			day       string
-			source    string
-			typ       string
-			count     int
+			appID       string
+			appPubkey   string
+			day         string
+			source      string
+			typ         string
+			countryCode string
+			count       int
 		)
-		if err := rows.Scan(&appID, &appPubkey, &day, &source, &typ, &count); err != nil {
+		if err := rows.Scan(&appID, &appPubkey, &day, &source, &typ, &countryCode, &count); err != nil {
 			return nil, fmt.Errorf("scan impressions: %v", err)
 		}
 
 		results = append(results, impressionRow{
 			Impression: Impression{
-				AppID:  appID,
-				Day:    Day(normalizeDay(day)),
-				Source: Source(source),
-				Type:   Type(typ),
+				AppID:       appID,
+				Day:         normalizeDay(day),
+				Source:      Source(source),
+				Type:        Type(typ),
+				CountryCode: countryCode,
 			},
 			Count: count,
 		})
@@ -254,7 +262,7 @@ func fetchImpressions(db *sql.DB) ([]impressionRow, error) {
 }
 
 func fetchDownloads(db *sql.DB) ([]downloadRow, error) {
-	rows, err := db.Query(`SELECT hash, day, source, count FROM downloads`)
+	rows, err := db.Query(`SELECT hash, day, source, country_code, count FROM downloads`)
 	if err != nil {
 		return nil, err
 	}
@@ -263,20 +271,22 @@ func fetchDownloads(db *sql.DB) ([]downloadRow, error) {
 	var results []downloadRow
 	for rows.Next() {
 		var (
-			hash   blossom.Hash
-			day    string
-			source string
-			count  int
+			hash        blossom.Hash
+			day         string
+			source      string
+			countryCode string
+			count       int
 		)
-		if err := rows.Scan(&hash, &day, &source, &count); err != nil {
+		if err := rows.Scan(&hash, &day, &source, &countryCode, &count); err != nil {
 			return nil, fmt.Errorf("scan downloads: %v", err)
 		}
 
 		results = append(results, downloadRow{
 			Download: Download{
-				Hash:   hash,
-				Day:    Day(normalizeDay(day)),
-				Source: Source(source),
+				Hash:        hash,
+				Day:         normalizeDay(day),
+				Source:      Source(source),
+				CountryCode: countryCode,
 			},
 			Count: count,
 		})
@@ -295,7 +305,7 @@ func normalizeDay(day string) string {
 	return strings.TrimSpace(day)
 }
 
-func sortRows(rows []impressionRow) {
+func sortImpressions(rows []impressionRow) {
 	slices.SortFunc(rows, func(r1, r2 impressionRow) int {
 		if c := cmp.Compare(r1.AppID, r2.AppID); c != 0 {
 			return c
@@ -309,11 +319,14 @@ func sortRows(rows []impressionRow) {
 		if c := cmp.Compare(string(r1.Source), string(r2.Source)); c != 0 {
 			return c
 		}
-		return cmp.Compare(string(r1.Type), string(r2.Type))
+		if c := cmp.Compare(string(r1.Type), string(r2.Type)); c != 0 {
+			return c
+		}
+		return cmp.Compare(r1.CountryCode, r2.CountryCode)
 	})
 }
 
-func sortDownloadRows(rows []downloadRow) {
+func sortDownloads(rows []downloadRow) {
 	slices.SortFunc(rows, func(r1, r2 downloadRow) int {
 		if c := cmp.Compare(r1.Hash.Hex(), r2.Hash.Hex()); c != 0 {
 			return c
@@ -321,6 +334,9 @@ func sortDownloadRows(rows []downloadRow) {
 		if c := cmp.Compare(string(r1.Day), string(r2.Day)); c != 0 {
 			return c
 		}
-		return cmp.Compare(string(r1.Source), string(r2.Source))
+		if c := cmp.Compare(string(r1.Source), string(r2.Source)); c != 0 {
+			return c
+		}
+		return cmp.Compare(r1.CountryCode, r2.CountryCode)
 	})
 }

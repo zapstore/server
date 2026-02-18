@@ -6,24 +6,38 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/netip"
+	"os"
 	"sync"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
+	"github.com/pippellia-btc/rely"
 )
 
 //go:embed schema.sql
 var schema string
 
+// Paths holds the file system locations for the analytics engine's files.
+// DB is the path to the SQLite database, MMDB is the path to the MaxMind IP geolocation database.
+type Paths struct {
+	DB   string
+	MMDB string
+}
+
 // Engine is the heart of the analytics system. It's responsible for processing data
 // and saving it in the database on periodic and bounded batches.
 type Engine struct {
-	db *sql.DB
+	db  *sql.DB
+	geo *maxminddb.Reader
 
 	downloads          chan Download
 	impressions        chan Impression
@@ -37,14 +51,9 @@ type Engine struct {
 }
 
 // NewEngine starts the background goroutine and returns the engine.
-func NewEngine(c Config, path string, logger *slog.Logger) (*Engine, error) {
-	db, err := newDB(path)
-	if err != nil {
-		return nil, fmt.Errorf("analytics: failed to open database: %w", err)
-	}
-
+func NewEngine(c Config, paths Paths, logger *slog.Logger) (*Engine, error) {
+	var err error
 	engine := &Engine{
-		db:                 db,
 		impressions:        make(chan Impression, c.QueueSize),
 		downloads:          make(chan Download, c.QueueSize),
 		pendingImpressions: make(map[Impression]int),
@@ -52,6 +61,20 @@ func NewEngine(c Config, path string, logger *slog.Logger) (*Engine, error) {
 		config:             c,
 		log:                logger,
 		done:               make(chan struct{}),
+	}
+
+	engine.db, err = newDB(paths.DB)
+	if err != nil {
+		return nil, fmt.Errorf("analytics: failed to open database at %q: %w", paths.DB, err)
+	}
+
+	if c.GeoEnabled {
+		engine.geo, err = maxminddb.Open(paths.MMDB)
+		if errors.Is(err, os.ErrNotExist) {
+			logger.Warn("analytics: ip geolocation database not found, geolocation disabled", "path", paths.MMDB)
+		} else if err != nil {
+			return nil, fmt.Errorf("analytics: failed to open ip geolocation database at %q: %w", paths.MMDB, err)
+		}
 	}
 
 	engine.wg.Add(1)
@@ -86,7 +109,7 @@ func newDB(path string) (*sql.DB, error) {
 }
 
 // Close closes the engine.
-// It will force [Engine.run] to flush any pendingImpressions data, close the database connection and return.
+// It will force [Engine.run] to flush any pending data, close the database connections and return.
 func (e *Engine) Close() {
 	close(e.done)
 	e.wg.Wait()
@@ -109,10 +132,39 @@ func (e *Engine) drain() {
 	}
 }
 
+// LookupCountry looks up the country ISO code of the given IP address.
+// If the Engine geolocation is not enabled or broken, the function returns an empty string.
+// Any error will be logged and the ISO code will be returned as an empty string.
+func (e *Engine) LookupCountry(ip net.IP) string {
+	if ip == nil {
+		return ""
+	}
+
+	if e.geo == nil {
+		return ""
+	}
+
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		e.log.Error("failed to lookup country of ip", "error", "failed to parse ip")
+		return ""
+	}
+
+	var country string
+	if err := e.geo.Lookup(addr).DecodePath(&country, "country", "iso_code"); err != nil {
+		e.log.Warn("failed to lookup country of ip", "error", err)
+		return ""
+	}
+	return country
+}
+
 // RecordImpressions records the impressions derived from the given REQ (id, filters),
 // and the nostr events served in response to it.
-func (e *Engine) RecordImpressions(id string, filters nostr.Filters, events []nostr.Event) {
-	impressions := NewImpressions(id, filters, events)
+// The client IP address is only used to lookup the country of the client.
+func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.Filters, events []nostr.Event) {
+	country := e.LookupCountry(client.IP().Raw)
+	impressions := NewImpressions(country, id, filters, events)
+
 	for i, impression := range impressions {
 		select {
 		case e.impressions <- impression:
@@ -125,9 +177,13 @@ func (e *Engine) RecordImpressions(id string, filters nostr.Filters, events []no
 }
 
 // RecordDownload records the download of the given hash by the given request.
+// The client IP address is only used to lookup the country of the client.
 func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
+	country := e.LookupCountry(r.IP().Raw)
+	download := NewDownload(country, r.Raw().Header, hash)
+
 	select {
-	case e.downloads <- NewDownload(r, hash):
+	case e.downloads <- download:
 	default:
 		e.log.Warn("failed to record download", "error", "channel is full")
 		return
@@ -145,17 +201,22 @@ func (e *Engine) run() {
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
+			e.log.Info("analytics: flushed all pending data")
 
 			if err := e.db.Close(); err != nil {
 				e.log.Error("analytics: failed to close database", "err", err)
 			}
-
-			e.log.Info("analytics: flushed all pending data")
+			if e.geo != nil {
+				if err := e.geo.Close(); err != nil {
+					e.log.Error("analytics: failed to close geolocation db", "err", err)
+				}
+			}
 			return
 
 		case <-ticker.C:
 			e.log.Debug("analytics: flushing on interval")
 			e.drain()
+
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
@@ -222,9 +283,9 @@ func (e *Engine) flushImpressions() error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO impressions (app_id, app_pubkey, day, source, type, count)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(app_id, app_pubkey, day, source, type)
+		INSERT INTO impressions (app_id, app_pubkey, day, source, type, country_code, count)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(app_id, app_pubkey, day, source, type, country_code)
 		DO UPDATE SET count = impressions.count + excluded.count
 	`)
 	if err != nil {
@@ -242,9 +303,10 @@ func (e *Engine) flushImpressions() error {
 			ctx,
 			impression.AppID,
 			impression.AppPubkey,
-			string(impression.Day),
+			impression.Day,
 			string(impression.Source),
 			string(impression.Type),
+			impression.CountryCode,
 			count,
 		); err != nil {
 			return fmt.Errorf("failed to execute statement: %w", err)
@@ -283,9 +345,9 @@ func (e *Engine) flushDownloads() error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO downloads (hash, day, source, count)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(hash, day, source)
+		INSERT INTO downloads (hash, day, source, country_code, count)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(hash, day, source, country_code)
 		DO UPDATE SET count = downloads.count + excluded.count
 	`)
 	if err != nil {
@@ -304,6 +366,7 @@ func (e *Engine) flushDownloads() error {
 			download.Hash,
 			string(download.Day),
 			string(download.Source),
+			download.CountryCode,
 			count,
 		); err != nil {
 			return fmt.Errorf("failed to execute statement: %w", err)
