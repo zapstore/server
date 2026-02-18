@@ -59,8 +59,8 @@ func (l *Locator) Close() error {
 	return l.db.Close()
 }
 
-// LookupCountry looks up the country ISO code of the given IP address.
-func (l *Locator) LookupCountry(ip net.IP) (string, error) {
+// Country looks up the country ISO code of the given IP address.
+func (l *Locator) Country(ip net.IP) (string, error) {
 	if ip == nil {
 		return "", errors.New("failed to lookup country: ip is nil")
 	}
@@ -82,7 +82,7 @@ func (l *Locator) LookupCountry(ip net.IP) (string, error) {
 }
 
 // Refresh re-downloads the geolocation database and swaps it atomically.
-// It is safe to call concurrently with LookupCountry.
+// It is safe to call concurrently with Country.
 func (l *Locator) Refresh(ctx context.Context) error {
 	if err := l.downloadDB(ctx); err != nil {
 		return err

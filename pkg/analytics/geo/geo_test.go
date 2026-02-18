@@ -59,13 +59,13 @@ func TestLocator_E2E(t *testing.T) {
 				t.Fatalf("failed to parse IP %q", test.ip)
 			}
 
-			country, err := locator.LookupCountry(ip)
+			country, err := locator.Country(ip)
 			if err != nil {
-				t.Fatalf("LookupCountry(%q) returned error: %v", test.ip, err)
+				t.Fatalf("Country(%q) returned error: %v", test.ip, err)
 			}
 
 			if country != test.expected {
-				t.Errorf("LookupCountry(%q) = %q, want %q", test.ip, country, test.expected)
+				t.Errorf("Country(%q) = %q, want %q", test.ip, country, test.expected)
 			}
 		})
 	}
