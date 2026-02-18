@@ -20,6 +20,24 @@ type AppSet struct {
 	Platforms []string
 }
 
+// Resolve resolves the app set identifiers into a list of public keys and app IDs.
+func (s AppSet) Resolve() (pubkeys []string, appIDs []string) {
+	for _, app := range s.Apps {
+		parts := strings.Split(string(app), ":")
+		if len(parts) != 3 {
+			continue
+		}
+
+		if parts[0] != "32267" {
+			continue
+		}
+
+		pubkeys = append(pubkeys, parts[1])
+		appIDs = append(appIDs, parts[2])
+	}
+	return pubkeys, appIDs
+}
+
 func (s AppSet) Validate() error {
 	for _, e := range s.Apps {
 		if err := e.Validate(); err != nil {
@@ -58,7 +76,7 @@ func (e AppIdentifier) Validate() error {
 }
 
 // ParseAppSet extracts a AppSet from a nostr.Event.
-// Returns an error if the event kind is wrong.
+// Returns an error if the event kind is structurally invalid.
 func ParseAppSet(event *nostr.Event) (AppSet, error) {
 	if event.Kind != KindAppSet {
 		return AppSet{}, fmt.Errorf("invalid kind: expected %d, got %d", KindAppSet, event.Kind)
@@ -89,38 +107,12 @@ func ValidateAppSet(event *nostr.Event) error {
 	return appSet.Validate()
 }
 
-// ExtractAppsFromSet returns all app IDs (kind 32267 identifiers)
-// referenced by an AppSet (kind 30267) event via "a" tags.
-//
-// Expected "a" tag format:
-//
-//	["a", "<32267>:<pubkey>:<identifier>"]
-func ExtractAppsFromSet(e nostr.Event) []string {
-	if e.Kind != KindAppSet {
-		return nil
+// ResolveAppSet resolves the app set identifiers into a list of public keys and app IDs.
+// It assumes the app set has already been validated.
+func ResolveAppSet(event *nostr.Event) (pubkeys []string, appIDs []string) {
+	appSet, err := ParseAppSet(event)
+	if err != nil {
+		return nil, nil
 	}
-
-	var appIDs []string
-
-	for _, tag := range e.Tags {
-		if len(tag) < 2 || tag[0] != "a" {
-			continue
-		}
-
-		parts := strings.Split(tag[1], ":")
-		if len(parts) != 3 {
-			continue
-		}
-
-		kind, appID := parts[0], parts[2]
-		if kind != "32267" {
-			continue
-		}
-		if appID == "" {
-			continue
-		}
-
-		appIDs = append(appIDs, appID)
-	}
-	return appIDs
+	return appSet.Resolve()
 }

@@ -11,10 +11,11 @@ import (
 
 // Impression of an app
 type Impression struct {
-	AppID  string
-	Day    Day // formatted as "YYYY-MM-DD"
-	Source Source
-	Type   Type
+	AppID     string
+	AppPubkey string
+	Day       Day // formatted as "YYYY-MM-DD"
+	Source    Source
+	Type      Type
 }
 
 // Day represents the day the impression was made, formatted as "YYYY-MM-DD".
@@ -99,12 +100,14 @@ func NewImpressions(id string, filters nostr.Filters, events []nostr.Event) []Im
 			switch {
 			case typ == TypeStack && event.Kind == eventPkg.KindAppSet:
 				// One impression for all apps inside the app set
-				for _, appID := range eventPkg.ExtractAppsFromSet(event) {
+				pubkeys, appIDs := eventPkg.ResolveAppSet(&event)
+				for i := range len(appIDs) {
 					impressions = append(impressions, Impression{
-						AppID:  appID,
-						Day:    day,
-						Source: source,
-						Type:   typ,
+						AppID:     appIDs[i],
+						AppPubkey: pubkeys[i],
+						Day:       day,
+						Source:    source,
+						Type:      typ,
 					})
 				}
 
@@ -116,10 +119,11 @@ func NewImpressions(id string, filters nostr.Filters, events []nostr.Event) []Im
 				}
 
 				impressions = append(impressions, Impression{
-					AppID:  appID,
-					Day:    day,
-					Source: source,
-					Type:   typ,
+					AppID:     appID,
+					AppPubkey: event.PubKey,
+					Day:       day,
+					Source:    source,
+					Type:      typ,
 				})
 			}
 		}

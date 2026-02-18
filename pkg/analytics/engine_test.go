@@ -216,7 +216,7 @@ func TestFlushDownloads(t *testing.T) {
 }
 
 func fetchImpressions(db *sql.DB) ([]impressionRow, error) {
-	rows, err := db.Query(`SELECT app_id, day, source, type, count FROM impressions`)
+	rows, err := db.Query(`SELECT * FROM impressions`)
 	if err != nil {
 		return nil, err
 	}
@@ -225,13 +225,14 @@ func fetchImpressions(db *sql.DB) ([]impressionRow, error) {
 	var results []impressionRow
 	for rows.Next() {
 		var (
-			appID  string
-			day    string
-			source string
-			typ    string
-			count  int
+			appID     string
+			appPubkey string
+			day       string
+			source    string
+			typ       string
+			count     int
 		)
-		if err := rows.Scan(&appID, &day, &source, &typ, &count); err != nil {
+		if err := rows.Scan(&appID, &appPubkey, &day, &source, &typ, &count); err != nil {
 			return nil, fmt.Errorf("scan impressions: %v", err)
 		}
 
@@ -297,6 +298,9 @@ func normalizeDay(day string) string {
 func sortRows(rows []impressionRow) {
 	slices.SortFunc(rows, func(r1, r2 impressionRow) int {
 		if c := cmp.Compare(r1.AppID, r2.AppID); c != 0 {
+			return c
+		}
+		if c := cmp.Compare(r1.AppPubkey, r2.AppPubkey); c != 0 {
 			return c
 		}
 		if c := cmp.Compare(string(r1.Day), string(r2.Day)); c != 0 {

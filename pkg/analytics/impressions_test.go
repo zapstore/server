@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -71,14 +70,14 @@ func TestNewImpressions(t *testing.T) {
 			id:      "app-req-1",
 			filters: nostr.Filters{{Kinds: []int{eventPkg.KindApp}}},
 			events: []nostr.Event{
-				appEvent("com.example.app1"),
-				appEvent("com.example.app2"),
-				appEvent("com.example.app3"),
+				appEvent("com.example.app1", "pk1"),
+				appEvent("com.example.app2", "pk2"),
+				appEvent("com.example.app3", "pk3"),
 			},
 			want: []Impression{
-				{AppID: "com.example.app1", Day: day, Source: SourceApp, Type: TypeFeed},
-				{AppID: "com.example.app2", Day: day, Source: SourceApp, Type: TypeFeed},
-				{AppID: "com.example.app3", Day: day, Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app1", AppPubkey: "pk1", Day: day, Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app2", AppPubkey: "pk2", Day: day, Source: SourceApp, Type: TypeFeed},
+				{AppID: "com.example.app3", AppPubkey: "pk3", Day: day, Source: SourceApp, Type: TypeFeed},
 			},
 		},
 		{
@@ -86,11 +85,11 @@ func TestNewImpressions(t *testing.T) {
 			id:      "web-req-1",
 			filters: nostr.Filters{{Kinds: []int{eventPkg.KindApp}, Tags: nostr.TagMap{"d": {"com.example.app1"}}}},
 			events: []nostr.Event{
-				appEvent("com.example.app1"),
-				appEvent("com.example.app2"), // skipped since it doesn't match the filter
+				appEvent("com.example.app1", "pubkey"),
+				appEvent("com.example.app2", "pubkey"), // skipped since it doesn't match the filter
 			},
 			want: []Impression{
-				{AppID: "com.example.app1", Day: day, Source: SourceWeb, Type: TypeDetail},
+				{AppID: "com.example.app1", AppPubkey: "pubkey", Day: day, Source: SourceWeb, Type: TypeDetail},
 			},
 		},
 		{
@@ -98,11 +97,11 @@ func TestNewImpressions(t *testing.T) {
 			id:      "app-req-2",
 			filters: nostr.Filters{{Kinds: []int{eventPkg.KindApp}, Search: "signal"}},
 			events: []nostr.Event{
-				appEvent("com.example.app1"),
-				appEvent(""),
+				appEvent("com.example.app1", "pubkey"),
+				appEvent("", "pubkey"),
 			},
 			want: []Impression{
-				{AppID: "com.example.app1", Day: day, Source: SourceApp, Type: TypeSearch},
+				{AppID: "com.example.app1", AppPubkey: "pubkey", Day: day, Source: SourceApp, Type: TypeSearch},
 			},
 		},
 		{
@@ -110,12 +109,12 @@ func TestNewImpressions(t *testing.T) {
 			id:      "web-req-2",
 			filters: nostr.Filters{{Kinds: []int{eventPkg.KindAppSet}}},
 			events: []nostr.Event{
-				appSetEvent("com.example.app1", "com.example.app2"),
-				appEvent("com.example.app1"),
+				appSetEvent("32267:pubkey:com.example.app1", "32267:pubkey:com.example.app2"),
+				appEvent("com.example.app1", "pubkey"), // not considered because doesn't match the filter
 			},
 			want: []Impression{
-				{AppID: "com.example.app1", Day: day, Source: SourceWeb, Type: TypeStack},
-				{AppID: "com.example.app2", Day: day, Source: SourceWeb, Type: TypeStack},
+				{AppID: "com.example.app1", AppPubkey: "pubkey", Day: day, Source: SourceWeb, Type: TypeStack},
+				{AppID: "com.example.app2", AppPubkey: "pubkey", Day: day, Source: SourceWeb, Type: TypeStack},
 			},
 		},
 		{
@@ -126,13 +125,13 @@ func TestNewImpressions(t *testing.T) {
 				{Kinds: []int{eventPkg.KindApp}, Tags: nostr.TagMap{"d": {"com.example.app3"}}},
 			},
 			events: []nostr.Event{
-				appSetEvent("com.example.app1", "com.example.app2"),
-				appEvent("com.example.app3"),
+				appSetEvent("32267:pubkey:com.example.app1", "32267:pubkey:com.example.app2"),
+				appEvent("com.example.app3", "PUBKEY"),
 			},
 			want: []Impression{
-				{AppID: "com.example.app1", Day: day, Source: SourceWeb, Type: TypeStack},
-				{AppID: "com.example.app2", Day: day, Source: SourceWeb, Type: TypeStack},
-				{AppID: "com.example.app3", Day: day, Source: SourceWeb, Type: TypeDetail},
+				{AppID: "com.example.app1", AppPubkey: "pubkey", Day: day, Source: SourceWeb, Type: TypeStack},
+				{AppID: "com.example.app2", AppPubkey: "pubkey", Day: day, Source: SourceWeb, Type: TypeStack},
+				{AppID: "com.example.app3", AppPubkey: "PUBKEY", Day: day, Source: SourceWeb, Type: TypeDetail},
 			},
 		},
 		{
@@ -140,7 +139,7 @@ func TestNewImpressions(t *testing.T) {
 			id:      "app-req-3",
 			filters: nostr.Filters{{}},
 			events: []nostr.Event{
-				appEvent("com.example.app1"),
+				appEvent("com.example.app1", "pubkey"),
 			},
 			want: []Impression{},
 		},
@@ -156,22 +155,23 @@ func TestNewImpressions(t *testing.T) {
 	}
 }
 
-func appEvent(appID string) nostr.Event {
+func appEvent(appID string, pubkey string) nostr.Event {
 	tags := nostr.Tags{}
 	if appID != "" {
 		tags = append(tags, nostr.Tag{"d", appID})
 	}
 
 	return nostr.Event{
-		Kind: eventPkg.KindApp,
-		Tags: tags,
+		PubKey: pubkey,
+		Kind:   eventPkg.KindApp,
+		Tags:   tags,
 	}
 }
 
-func appSetEvent(appIDs ...string) nostr.Event {
+func appSetEvent(aTags ...string) nostr.Event {
 	tags := nostr.Tags{}
-	for _, appID := range appIDs {
-		tags = append(tags, nostr.Tag{"a", fmt.Sprintf("32267:pubkey:%s", appID)})
+	for _, aTag := range aTags {
+		tags = append(tags, nostr.Tag{"a", aTag})
 	}
 
 	return nostr.Event{

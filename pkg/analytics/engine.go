@@ -222,9 +222,9 @@ func (e *Engine) flushImpressions() error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO impressions (app_id, day, source, type, count)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(app_id, day, source, type)
+		INSERT INTO impressions (app_id, app_pubkey, day, source, type, count)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(app_id, app_pubkey, day, source, type)
 		DO UPDATE SET count = impressions.count + excluded.count
 	`)
 	if err != nil {
@@ -241,6 +241,7 @@ func (e *Engine) flushImpressions() error {
 		if _, err := stmt.ExecContext(
 			ctx,
 			impression.AppID,
+			impression.AppPubkey,
 			string(impression.Day),
 			string(impression.Source),
 			string(impression.Type),
