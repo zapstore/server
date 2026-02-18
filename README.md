@@ -59,15 +59,21 @@ A Nostr relay and Blossom server for the Zapstore app ecosystem.
 git clone https://github.com/zapstore/server.git
 cd server
 
+# Build with default parameters:
+# - TAG = <latest_tag>
+# - BUILD_DIR = /build
+make server
+
+# Or build with specific tag and build directory
+make server TAG=v1.2.3 BUILD_DIR=path/to/build
+
 # Create and configure .env file
-cp cmd/.env.example cmd/.env
-# Edit cmd/.env with your configuration
+cp cmd/.env.example build/.env
 
-# Build
-go build --tags "fts5" -o zapstore-server ./cmd
+# Edit build/.env with your configuration
 
-# Run
-./zapstore-server
+# Run (use the tag that was built)
+./build/server-v1.2.3
 ```
 
 ### Data Directory Structure

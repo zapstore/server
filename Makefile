@@ -1,37 +1,43 @@
 BUILD_DIR := build
 GO_TAGS := -tags fts5
 LDFLAGS := -s -w
+TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null)
 
-PLATFORMS := darwin-arm64 linux-arm64 linux-amd64
+# Build from current checkout; TAG handling happens in the recipe below.
 
-# Platform → GOOS/GOARCH/CC mapping.
-# CGO is required for go-sqlite3. Cross-compiling Linux targets from macOS
-# requires a C cross-compiler (e.g. zig cc, musl-cross, or GNU toolchain).
-# Set CC_LINUX_ARM64 / CC_LINUX_AMD64 to override.
-darwin-arm64_GOOS   := darwin
-darwin-arm64_GOARCH := arm64
-darwin-arm64_CC     := $(CC)
-
-linux-arm64_GOOS   := linux
-linux-arm64_GOARCH := arm64
-linux-arm64_CC     := $(or $(CC_LINUX_ARM64),aarch64-linux-gnu-gcc)
-
-linux-amd64_GOOS   := linux
-linux-amd64_GOARCH := amd64
-linux-amd64_CC     := $(or $(CC_LINUX_AMD64),x86_64-linux-gnu-gcc)
-
-.PHONY: all clean server \
-	$(PLATFORMS:%=server-%)
+.PHONY: all clean server
 
 all: server
 
-server: $(PLATFORMS:%=server-%)
-
-$(PLATFORMS:%=server-%):
-	$(eval P := $(@:server-%=%))
-	CGO_ENABLED=1 GOOS=$($(P)_GOOS) GOARCH=$($(P)_GOARCH) CC="$($(P)_CC)" \
+server:
+	@echo "Building server at tag $(TAG)"
+	@mkdir -p $(BUILD_DIR)
+	@set -e; \
+	if [ -z "$(TAG)" ]; then \
+		echo "No tags found" >&2; \
+		exit 1; \
+	fi; \
+	if ! git rev-parse -q --verify "refs/tags/$(TAG)" >/dev/null; then \
+		echo "Tag $(TAG) not found" >&2; \
+		exit 1; \
+	fi; \
+	if [ -n "$(TAG)" ]; then \
+		ORIG_REF="$$(git rev-parse --abbrev-ref HEAD)"; \
+		ORIG_SHA="$$(git rev-parse HEAD)"; \
+		RESTORE() { \
+			if [ "$$ORIG_REF" = "HEAD" ]; then \
+				git checkout -q "$$ORIG_SHA"; \
+			else \
+				git checkout -q "$$ORIG_REF"; \
+			fi; \
+		}; \
+		trap 'RESTORE' EXIT; \
+		git -c advice.detachedHead=false checkout -q "$(TAG)"; \
+	fi; \
+	CGO_ENABLED=1 \
 		go build $(GO_TAGS) -ldflags "$(LDFLAGS)" \
-		-o $(BUILD_DIR)/server-$(P) ./cmd/
+		-o $(BUILD_DIR)/server-$(TAG) ./cmd/; \
+	echo "Build server commit hash $$(git rev-parse HEAD), $$(git log -1 --pretty=%s)"
 
 clean:
 	rm -rf $(BUILD_DIR)
