@@ -6,38 +6,34 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
-	"net/netip"
-	"os"
 	"sync"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
-	"github.com/oschwald/maxminddb-golang/v2"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rely"
+	"github.com/zapstore/server/pkg/analytics/geo"
 )
 
 //go:embed schema.sql
 var schema string
 
 // Paths holds the file system locations for the analytics engine's files.
-// DB is the path to the SQLite database, MMDB is the path to the MaxMind IP geolocation database.
 type Paths struct {
-	DB   string
-	MMDB string
+	DB  string
+	Geo string
 }
 
 // Engine is the heart of the analytics system. It's responsible for processing data
 // and saving it in the database on periodic and bounded batches.
 type Engine struct {
 	db  *sql.DB
-	geo *maxminddb.Reader
+	geo *geo.Locator
 
 	downloads          chan Download
 	impressions        chan Impression
@@ -69,11 +65,9 @@ func NewEngine(c Config, paths Paths, logger *slog.Logger) (*Engine, error) {
 	}
 
 	if c.GeoEnabled {
-		engine.geo, err = maxminddb.Open(paths.MMDB)
-		if errors.Is(err, os.ErrNotExist) {
-			logger.Warn("analytics: ip geolocation database not found, geolocation disabled", "path", paths.MMDB)
-		} else if err != nil {
-			return nil, fmt.Errorf("analytics: failed to open ip geolocation database at %q: %w", paths.MMDB, err)
+		engine.geo, err = geo.NewLocator(c.Geo, paths.Geo)
+		if err != nil {
+			return nil, fmt.Errorf("analytics: failed to create geo locator: %w", err)
 		}
 	}
 
@@ -132,27 +126,16 @@ func (e *Engine) drain() {
 	}
 }
 
-// LookupCountry looks up the country ISO code of the given IP address.
-// If the Engine geolocation is not enabled or broken, the function returns an empty string.
-// Any error will be logged and the ISO code will be returned as an empty string.
-func (e *Engine) LookupCountry(ip net.IP) string {
-	if ip == nil {
+// lookupCountry returns the ISO country code for the given IP.
+// If geo-location is not enabled or the lookup fails, an empty string is returned.
+func (e *Engine) lookupCountry(ip net.IP) string {
+	if !e.config.GeoEnabled {
 		return ""
 	}
 
-	if e.geo == nil {
-		return ""
-	}
-
-	addr, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		e.log.Error("failed to lookup country of ip", "error", "failed to parse ip")
-		return ""
-	}
-
-	var country string
-	if err := e.geo.Lookup(addr).DecodePath(&country, "country", "iso_code"); err != nil {
-		e.log.Warn("failed to lookup country of ip", "error", err)
+	country, err := e.geo.Country(ip)
+	if err != nil {
+		e.log.Warn("analytics: failed to lookup country", "error", err)
 		return ""
 	}
 	return country
@@ -162,7 +145,7 @@ func (e *Engine) LookupCountry(ip net.IP) string {
 // and the nostr events served in response to it.
 // The client IP address is only used to lookup the country of the client.
 func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.Filters, events []nostr.Event) {
-	country := e.LookupCountry(client.IP().Raw)
+	country := e.lookupCountry(client.IP().Raw)
 	impressions := NewImpressions(country, id, filters, events)
 
 	for i, impression := range impressions {
@@ -179,7 +162,7 @@ func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.
 // RecordDownload records the download of the given hash by the given request.
 // The client IP address is only used to lookup the country of the client.
 func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
-	country := e.LookupCountry(r.IP().Raw)
+	country := e.lookupCountry(r.IP().Raw)
 	download := NewDownload(country, r.Raw().Header, hash)
 
 	select {
@@ -191,8 +174,15 @@ func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
 }
 
 func (e *Engine) run() {
-	ticker := time.NewTicker(e.config.FlushInterval)
-	defer ticker.Stop()
+	flushTicker := time.NewTicker(e.config.FlushInterval)
+	defer flushTicker.Stop()
+
+	var geoTicker <-chan time.Time
+	if e.config.GeoEnabled {
+		t := time.NewTicker(e.config.GeoRefreshInterval)
+		defer t.Stop()
+		geoTicker = t.C
+	}
 
 	for {
 		select {
@@ -206,14 +196,20 @@ func (e *Engine) run() {
 			if err := e.db.Close(); err != nil {
 				e.log.Error("analytics: failed to close database", "err", err)
 			}
-			if e.geo != nil {
+			if e.config.GeoEnabled {
 				if err := e.geo.Close(); err != nil {
 					e.log.Error("analytics: failed to close geolocation db", "err", err)
 				}
 			}
 			return
 
-		case <-ticker.C:
+		case <-geoTicker:
+			e.log.Info("analytics: refreshing geolocation database")
+			if err := e.geo.Refresh(context.Background()); err != nil {
+				e.log.Error("analytics: failed to refresh geolocation database", "err", err)
+			}
+
+		case <-flushTicker.C:
 			e.log.Debug("analytics: flushing on interval")
 			e.drain()
 

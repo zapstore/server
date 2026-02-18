@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/zapstore/server/pkg/analytics/geo"
 )
 
 type Config struct {
@@ -22,15 +24,22 @@ type Config struct {
 
 	// GeoEnabled is a flag indicating whether geo-location (country code) should be collected and stored. Default is true.
 	GeoEnabled bool `env:"ANALYTICS_GEO_ENABLED"`
+
+	// GeoRefreshInterval is the interval at which the geo-location database is refreshed. Default is 24 hours.
+	GeoRefreshInterval time.Duration `env:"ANALYTICS_GEO_REFRESH_INTERVAL"`
+
+	Geo geo.Config
 }
 
 func NewConfig() Config {
 	return Config{
-		FlushInterval: 5 * time.Minute,
-		FlushTimeout:  10 * time.Second,
-		FlushSize:     1000,
-		QueueSize:     100_000,
-		GeoEnabled:    true,
+		FlushInterval:      5 * time.Minute,
+		FlushTimeout:       10 * time.Second,
+		FlushSize:          1000,
+		QueueSize:          100_000,
+		GeoEnabled:         true,
+		GeoRefreshInterval: 24 * time.Hour,
+		Geo:                geo.NewConfig(),
 	}
 }
 
@@ -53,6 +62,14 @@ func (c Config) Validate() error {
 	if c.QueueSize <= 0 {
 		return errors.New("queue size must be greater than 0")
 	}
+	if c.GeoEnabled {
+		if c.GeoRefreshInterval < time.Hour {
+			return errors.New("geo refresh interval must be at least 1 hour to avoid rate-limits")
+		}
+		if err := c.Geo.Validate(); err != nil {
+			return fmt.Errorf("geo config: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -62,10 +79,14 @@ func (c Config) String() string {
 		"\tFlush Timeout: %s\n"+
 		"\tFlush Size: %d\n"+
 		"\tQueue Size: %d\n"+
-		"\tGeo Enabled: %t\n",
+		"\tGeo Enabled: %t\n"+
+		"\tGeo Refresh Interval: %s\n"+
+		"%s",
 		c.FlushInterval,
 		c.FlushTimeout,
 		c.FlushSize,
 		c.QueueSize,
-		c.GeoEnabled)
+		c.GeoEnabled,
+		c.GeoRefreshInterval,
+		c.Geo.String())
 }
