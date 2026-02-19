@@ -74,8 +74,8 @@ func main() {
 	}
 
 	paths := analytics.Paths{
-		DB:  filepath.Join(analyticsDir, "analytics.db"),
-		Geo: filepath.Join(analyticsDir, "ip66.mmdb"),
+		Store: filepath.Join(analyticsDir, "analytics.db"),
+		Geo:   filepath.Join(analyticsDir, "ip66.mmdb"),
 	}
 
 	analytics, err := analytics.NewEngine(config.Analytics, paths, logger)

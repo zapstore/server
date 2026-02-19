@@ -4,41 +4,36 @@ package analytics
 
 import (
 	"context"
-	"database/sql"
-	_ "embed"
 	"fmt"
 	"log/slog"
 	"net"
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/blossy"
 	"github.com/pippellia-btc/rely"
 	"github.com/zapstore/server/pkg/analytics/geo"
+	"github.com/zapstore/server/pkg/analytics/store"
 )
-
-//go:embed schema.sql
-var schema string
 
 // Paths holds the file system locations for the analytics engine's files.
 type Paths struct {
-	DB  string
-	Geo string
+	Store string
+	Geo   string
 }
 
 // Engine is the heart of the analytics system. It's responsible for processing data
 // and saving it in the database on periodic and bounded batches.
 type Engine struct {
-	db  *sql.DB
-	geo *geo.Locator
+	store *store.Store
+	geo   *geo.Locator
 
-	downloads          chan Download
-	impressions        chan Impression
-	pendingImpressions map[Impression]int // Impression --> count
-	pendingDownloads   map[Download]int   // Download --> count
+	downloads          chan store.Download
+	impressions        chan store.Impression
+	pendingImpressions map[store.Impression]int // Impression --> count
+	pendingDownloads   map[store.Download]int   // Download --> count
 
 	config Config
 	log    *slog.Logger
@@ -50,23 +45,24 @@ type Engine struct {
 func NewEngine(c Config, paths Paths, logger *slog.Logger) (*Engine, error) {
 	var err error
 	engine := &Engine{
-		impressions:        make(chan Impression, c.QueueSize),
-		downloads:          make(chan Download, c.QueueSize),
-		pendingImpressions: make(map[Impression]int),
-		pendingDownloads:   make(map[Download]int),
+		impressions:        make(chan store.Impression, c.QueueSize),
+		downloads:          make(chan store.Download, c.QueueSize),
+		pendingImpressions: make(map[store.Impression]int),
+		pendingDownloads:   make(map[store.Download]int),
 		config:             c,
 		log:                logger,
 		done:               make(chan struct{}),
 	}
 
-	engine.db, err = newDB(paths.DB)
+	engine.store, err = store.New(paths.Store)
 	if err != nil {
-		return nil, fmt.Errorf("analytics: failed to open database at %q: %w", paths.DB, err)
+		return nil, fmt.Errorf("analytics: failed to open database at %q: %w", paths.Store, err)
 	}
 
 	if c.GeoEnabled {
 		engine.geo, err = geo.NewLocator(c.Geo, paths.Geo)
 		if err != nil {
+			engine.store.Close()
 			return nil, fmt.Errorf("analytics: failed to create geo locator: %w", err)
 		}
 	}
@@ -77,29 +73,6 @@ func NewEngine(c Config, paths Paths, logger *slog.Logger) (*Engine, error) {
 		engine.run()
 	}()
 	return engine, nil
-}
-
-func newDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to sqlite3 at %s: %w", path, err)
-	}
-	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("failed to apply base schema: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA journal_mode = WAL;"); err != nil {
-		return nil, fmt.Errorf("failed to set WAL mode: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000;"); err != nil {
-		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		return nil, fmt.Errorf("failed to activate foreign keys: %w", err)
-	}
-	if _, err = db.Exec("PRAGMA optimize=0x10002;"); err != nil {
-		return nil, fmt.Errorf("failed to PRAGMA optimize: %w", err)
-	}
-	return db, nil
 }
 
 // Close closes the engine.
@@ -146,14 +119,14 @@ func (e *Engine) lookupCountry(ip net.IP) string {
 // The client IP address is only used to lookup the country of the client.
 func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.Filters, events []nostr.Event) {
 	country := e.lookupCountry(client.IP().Raw)
-	impressions := NewImpressions(country, id, filters, events)
+	impressions := store.NewImpressions(country, id, filters, events)
 
 	for i, impression := range impressions {
 		select {
 		case e.impressions <- impression:
 		default:
 			dropped := len(impressions) - i
-			e.log.Warn("failed to record impressions", "error", "channel is full", "dropped", dropped)
+			e.log.Warn("analytics: failed to record impressions", "error", "channel is full", "dropped", dropped)
 			return
 		}
 	}
@@ -163,12 +136,12 @@ func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.
 // The client IP address is only used to lookup the country of the client.
 func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
 	country := e.lookupCountry(r.IP().Raw)
-	download := NewDownload(country, r.Raw().Header, hash)
+	download := store.NewDownload(country, r.Raw().Header, hash)
 
 	select {
 	case e.downloads <- download:
 	default:
-		e.log.Warn("failed to record download", "error", "channel is full")
+		e.log.Warn("analytics: failed to record download", "error", "channel is full")
 		return
 	}
 }
@@ -193,7 +166,7 @@ func (e *Engine) run() {
 			}
 			e.log.Info("analytics: flushed all pending data")
 
-			if err := e.db.Close(); err != nil {
+			if err := e.store.Close(); err != nil {
 				e.log.Error("analytics: failed to close database", "err", err)
 			}
 			if e.config.GeoEnabled {
@@ -240,23 +213,20 @@ func (e *Engine) run() {
 	}
 }
 
+// pending returns the total number of pending impressions and downloads.
+func (e *Engine) pending() int {
+	return len(e.pendingImpressions) + len(e.pendingDownloads)
+}
+
 // flushAll commits any pending data to the database.
 func (e *Engine) flushAll() error {
-	for {
-		if len(e.pendingImpressions)+len(e.pendingDownloads) == 0 {
-			break
+	for e.pending() > 0 {
+		if err := e.flushImpressions(); err != nil {
+			return fmt.Errorf("failed to flush impressions: %w", err)
 		}
 
-		if len(e.pendingImpressions) > 0 {
-			if err := e.flushImpressions(); err != nil {
-				return fmt.Errorf("failed to flush impressions: %w", err)
-			}
-		}
-
-		if len(e.pendingDownloads) > 0 {
-			if err := e.flushDownloads(); err != nil {
-				return fmt.Errorf("failed to flush downloads: %w", err)
-			}
+		if err := e.flushDownloads(); err != nil {
+			return fmt.Errorf("failed to flush downloads: %w", err)
 		}
 	}
 	return nil
@@ -272,54 +242,28 @@ func (e *Engine) flushImpressions() error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.config.FlushTimeout)
 	defer cancel()
 
-	tx, err := e.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO impressions (app_id, app_pubkey, day, source, type, country_code, count)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(app_id, app_pubkey, day, source, type, country_code)
-		DO UPDATE SET count = impressions.count + excluded.count
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	flushed := make([]Impression, 0, e.config.FlushSize)
+	flushed := make([]store.ImpressionCount, 0, e.config.FlushSize)
 	for impression, count := range e.pendingImpressions {
+		if len(flushed) >= e.config.FlushSize {
+			break
+		}
+
 		if count <= 0 {
 			continue
 		}
 
-		if _, err := stmt.ExecContext(
-			ctx,
-			impression.AppID,
-			impression.AppPubkey,
-			impression.Day,
-			string(impression.Source),
-			string(impression.Type),
-			impression.CountryCode,
-			count,
-		); err != nil {
-			return fmt.Errorf("failed to execute statement: %w", err)
-		}
-
-		flushed = append(flushed, impression)
-		if len(flushed) >= e.config.FlushSize {
-			break
-		}
+		flushed = append(flushed, store.ImpressionCount{
+			Impression: impression,
+			Count:      count,
+		})
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	if err := e.store.SaveImpressions(ctx, flushed); err != nil {
+		return fmt.Errorf("failed to save impressions: %w", err)
 	}
 
 	for _, f := range flushed {
-		delete(e.pendingImpressions, f)
+		delete(e.pendingImpressions, f.Impression)
 	}
 	return nil
 }
@@ -334,52 +278,28 @@ func (e *Engine) flushDownloads() error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.config.FlushTimeout)
 	defer cancel()
 
-	tx, err := e.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO downloads (hash, day, source, country_code, count)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(hash, day, source, country_code)
-		DO UPDATE SET count = downloads.count + excluded.count
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	defer stmt.Close()
-
-	flushed := make([]Download, 0, e.config.FlushSize)
+	flushed := make([]store.DownloadCount, 0, e.config.FlushSize)
 	for download, count := range e.pendingDownloads {
+		if len(flushed) >= e.config.FlushSize {
+			break
+		}
+
 		if count <= 0 {
 			continue
 		}
 
-		if _, err := stmt.ExecContext(
-			ctx,
-			download.Hash,
-			string(download.Day),
-			string(download.Source),
-			download.CountryCode,
-			count,
-		); err != nil {
-			return fmt.Errorf("failed to execute statement: %w", err)
-		}
-
-		flushed = append(flushed, download)
-		if len(flushed) >= e.config.FlushSize {
-			break
-		}
+		flushed = append(flushed, store.DownloadCount{
+			Download: download,
+			Count:    count,
+		})
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	if err := e.store.SaveDownloads(ctx, flushed); err != nil {
+		return fmt.Errorf("failed to save downloads: %w", err)
 	}
 
 	for _, f := range flushed {
-		delete(e.pendingDownloads, f)
+		delete(e.pendingDownloads, f.Download)
 	}
 	return nil
 }
