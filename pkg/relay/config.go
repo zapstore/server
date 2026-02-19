@@ -49,7 +49,7 @@ func NewConfig() Config {
 		MaxMessageBytes: 500_000,
 		MaxReqFilters:   50,
 		ResponseLimit:   200,
-		AllowedKinds:    events.WithValidation,
+		AllowedKinds:    append(events.WithValidation, nostr.KindDeletion),
 	}
 }
 

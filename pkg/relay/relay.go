@@ -87,18 +87,29 @@ func Save(store *sqlite.Store) func(c rely.Client, event *nostr.Event) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		var err error
 		switch {
+		case event.Kind == nostr.KindDeletion:
+			if _, err := store.DeleteRequest(ctx, event); err != nil {
+				slog.Error("relay: failed to fulfill the delete request", "error", err, "event", event.ID)
+				return err
+			}
+
+			if _, err := store.Save(ctx, event); err != nil {
+				slog.Error("relay: failed to save the delete request", "error", err, "event", event.ID)
+				return err
+			}
+
 		case nostr.IsRegularKind(event.Kind):
-			_, err = store.Save(ctx, event)
+			if _, err := store.Save(ctx, event); err != nil {
+				slog.Error("relay: failed to save the event", "error", err, "event", event.ID)
+				return err
+			}
 
 		case nostr.IsReplaceableKind(event.Kind) || nostr.IsAddressableKind(event.Kind):
-			_, err = store.Replace(ctx, event)
-		}
-
-		if err != nil {
-			slog.Error("relay: failed to save event", "error", err, "event", event.ID)
-			return err
+			if _, err := store.Replace(ctx, event); err != nil {
+				slog.Error("relay: failed to replace the event", "error", err, "event", event.ID)
+				return err
+			}
 		}
 		return nil
 	}
