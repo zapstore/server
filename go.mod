@@ -15,7 +15,7 @@ require (
 	github.com/pippellia-btc/rate v0.2.1
 	github.com/pippellia-btc/rely v1.5.0
 	github.com/pippellia-btc/smallset v0.4.2
-	github.com/vertex-lab/nostr-sqlite v0.5.0
+	github.com/vertex-lab/nostr-sqlite v0.6.0
 )
 
 require (
