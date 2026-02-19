@@ -38,6 +38,12 @@ A Nostr relay and Blossom server for the Zapstore app ecosystem.
 - Configurable reputation threshold
 - In-memory LRU cache for rank lookups
 
+### Analytics
+- Privacy-preserving usage statistics for app impressions and blob downloads
+- Counts impressions derived from Nostr REQs
+- Counts downloads from blossom downloads
+- Batched, non-blocking writes: events are queued in memory and flushed to SQLite periodically or when the batch size threshold is reached
+
 ### Rate Limiting
 - Token bucket rate limiting per IP group
 - Configurable initial tokens, max tokens, and refill rate
