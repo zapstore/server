@@ -40,6 +40,7 @@ func NewLocator(c Config, path string) (*Locator, error) {
 	}
 
 	if errors.Is(err, os.ErrNotExist) {
+		slog.Info("downloading geolocation database", "endpoint", c.DownloadEndpoint)
 		if err = locator.downloadDB(context.Background()); err != nil {
 			return nil, fmt.Errorf("failed to download geolocation database from %q: %w", c.DownloadEndpoint, err)
 		}
