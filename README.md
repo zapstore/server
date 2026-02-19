@@ -68,7 +68,7 @@ make server
 make server TAG=v1.2.3 BUILD_DIR=path/to/build
 
 # Create and configure .env file
-cp cmd/.env.example build/.env
+cp .env.example build/.env
 
 # Edit build/.env with your configuration
 
