@@ -50,6 +50,11 @@ func TestLocator_E2E(t *testing.T) {
 			ip:       "80.148.0.1",
 			expected: "DE",
 		},
+		{
+			name:     "Loopback address",
+			ip:       "127.0.0.1",
+			expected: "",
+		},
 	}
 
 	for _, test := range tests {

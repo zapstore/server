@@ -61,6 +61,8 @@ func (l *Locator) Close() error {
 }
 
 // Country looks up the country ISO code of the given IP address.
+// It returns an empty string (and no error) for loopback, private, and
+// link-local addresses, since those have no meaningful geographic location.
 func (l *Locator) Country(ip net.IP) (string, error) {
 	if ip == nil {
 		return "", errors.New("failed to lookup country: ip is nil")
@@ -71,6 +73,10 @@ func (l *Locator) Country(ip net.IP) (string, error) {
 		return "", errors.New("failed to lookup country: failed to parse ip")
 	}
 	addr = addr.Unmap()
+
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsUnspecified() {
+		return "", nil
+	}
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()
