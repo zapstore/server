@@ -15,7 +15,7 @@ type Config struct {
 	// DownloadTimeout is the timeout for downloading the .mmdb database. Default is 1 minute.
 	DownloadTimeout time.Duration `env:"ANALYTICS_GEO_DOWNLOAD_TIMEOUT"`
 
-	// DownloadMaxSize is the maximum size in bytes of the .mmdb database to download. Default is 1 GiB.
+	// DownloadMaxSize is the maximum size in bytes of the .mmdb database to download. Default is 1 GB.
 	DownloadMaxSize int64 `env:"ANALYTICS_GEO_DOWNLOAD_MAX_SIZE"`
 }
 
@@ -23,7 +23,7 @@ func NewConfig() Config {
 	return Config{
 		DownloadEndpoint: ip66Endpoint,
 		DownloadTimeout:  time.Minute,
-		DownloadMaxSize:  1 << 30, // 1 GiB
+		DownloadMaxSize:  1_000_000_000,
 	}
 }
 

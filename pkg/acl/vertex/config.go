@@ -41,13 +41,13 @@ type Algorithm struct {
 	Source string `env:"VERTEX_SOURCE"`
 
 	// The threshold above which an unknown pubkey is allowed.
-	// Default is 0.0, which means that all pubkeys will be allowed.
+	// Default is 0.000005.
 	Threshold float64 `env:"VERTEX_THRESHOLD"`
 }
 
 func NewConfig() Config {
 	return Config{
-		Algorithm:       Algorithm{Sort: SortGlobal},
+		Algorithm:       Algorithm{Sort: SortGlobal, Threshold: 0.000005},
 		Timeout:         10 * time.Second,
 		CacheExpiration: 24 * time.Hour,
 		CacheSize:       100_000,
