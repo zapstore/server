@@ -44,6 +44,3 @@ go.work.sum
 
 # Build output
 build/
-
-# SQL dumps
-*.sql
