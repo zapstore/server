@@ -165,6 +165,7 @@ func TestRelayStress(t *testing.T) {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
+					// proceed and write message
 				}
 
 				var (
