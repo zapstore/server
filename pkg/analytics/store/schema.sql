@@ -27,3 +27,19 @@ CREATE TABLE IF NOT EXISTS downloads (
 CREATE INDEX IF NOT EXISTS downloads_day ON downloads (day);
 CREATE INDEX IF NOT EXISTS downloads_source ON downloads (source);
 CREATE INDEX IF NOT EXISTS downloads_country_code ON downloads (country_code);
+
+CREATE TABLE IF NOT EXISTS relay_metrics (
+  day           DATE NOT NULL,
+  reqs          INTEGER NOT NULL DEFAULT 0, -- REQs fulfilled
+  filters       INTEGER NOT NULL DEFAULT 0, -- filters fulfilled
+  events        INTEGER NOT NULL DEFAULT 0, -- events saved or replaced
+  PRIMARY KEY (day)
+);
+
+CREATE TABLE IF NOT EXISTS blossom_metrics (
+  day           DATE NOT NULL,
+  uploads       INTEGER NOT NULL DEFAULT 0, -- uploads that hit bunny
+  downloads     INTEGER NOT NULL DEFAULT 0, -- downloads that succeeded
+  checks        INTEGER NOT NULL DEFAULT 0, -- checks that succeeded
+  PRIMARY KEY (day)
+);
