@@ -123,7 +123,7 @@ func Query(store *sqlite.Store, analytics *analytics.Engine) func(ctx context.Co
 		defer cancel()
 
 		events, err := store.Query(ctx, filters...)
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("relay: failed to query events", "error", err, "filters", filters)
 			return nil, err
 		}

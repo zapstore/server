@@ -81,7 +81,7 @@ func Check(db *store.Store, analytics *analytics.Engine) func(r blossy.Request, 
 		if errors.Is(err, store.ErrBlobNotFound) {
 			return nil, ErrNotFound
 		}
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
 			return nil, ErrInternal
 		}
@@ -104,7 +104,7 @@ func Download(db *store.Store, client bunny.Client, analytics *analytics.Engine)
 		if errors.Is(err, store.ErrBlobNotFound) {
 			return nil, ErrNotFound
 		}
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
 			return nil, ErrInternal
 		}
@@ -185,13 +185,13 @@ func Upload(
 			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
 		}
 
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("blossom: failed to upload blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
 		_, size, err := client.Check(ctx, name)
-		if err != nil {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("blossom: failed to check blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
@@ -209,7 +209,8 @@ func Upload(
 			CreatedAt: time.Now().UTC(),
 		}
 
-		if _, err = db.Save(ctx, meta); err != nil {
+		_, err = db.Save(ctx, meta)
+		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("blossom: failed to save blob metadata", "error", err, "hash", hints.Hash)
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
