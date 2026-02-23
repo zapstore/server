@@ -24,6 +24,7 @@ func New(path string) (*sqlite.Store, error) {
 		sqlite.WithAdditionalSchema(schema),
 		sqlite.WithQueryBuilder(queryBuilder),
 		sqlite.WithBusyTimeout(10*time.Second),
+		sqlite.WithCacheSize(256*sqlite.MiB),
 		sqlite.WithoutEventPolicy(),  // events have been validated by the relay
 		sqlite.WithoutFilterPolicy(), // filters have been validated by the relay
 	)
