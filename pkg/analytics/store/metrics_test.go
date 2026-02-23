@@ -242,10 +242,10 @@ func queryRelayMetrics(db *sql.DB, day string) (RelayMetrics, error) {
 func queryBlossomMetrics(db *sql.DB, day string) (BlossomMetrics, error) {
 	var m BlossomMetrics
 	err := db.QueryRow(`
-		SELECT day, uploads, downloads, checks
+		SELECT day, checks, downloads, uploads
 		FROM blossom_metrics
 		WHERE day = ?
-	`, day).Scan(&m.Day, &m.Uploads, &m.Downloads, &m.Checks)
+	`, day).Scan(&m.Day, &m.Checks, &m.Downloads, &m.Uploads)
 	if err != nil {
 		return BlossomMetrics{}, fmt.Errorf("scan blossom_metrics: %w", err)
 	}

@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS relay_metrics (
 
 CREATE TABLE IF NOT EXISTS blossom_metrics (
   day           DATE NOT NULL,
-  uploads       INTEGER NOT NULL DEFAULT 0, -- uploads that hit bunny
-  downloads     INTEGER NOT NULL DEFAULT 0, -- downloads that succeeded
   checks        INTEGER NOT NULL DEFAULT 0, -- checks that succeeded
+  downloads     INTEGER NOT NULL DEFAULT 0, -- downloads that succeeded
+  uploads       INTEGER NOT NULL DEFAULT 0, -- uploads that hit bunny
   PRIMARY KEY (day)
 );
