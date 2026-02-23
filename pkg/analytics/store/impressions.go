@@ -87,7 +87,7 @@ func ImpressionType(filter nostr.Filter) Type {
 // matched against the nostr events served in response to it.
 // The impressions will have to be deduplicated into ImpressionCount before being passed to the store.
 func NewImpressions(country string, id string, filters nostr.Filters, events []nostr.Event) []Impression {
-	day := today()
+	day := Today()
 	source := ImpressionSource(id)
 	impressions := make([]Impression, 0, len(events))
 
@@ -133,8 +133,8 @@ func NewImpressions(country string, id string, filters nostr.Filters, events []n
 	return impressions
 }
 
-// today returns the current day formatted as "YYYY-MM-DD".
-func today() string {
+// Today returns the current day formatted as "YYYY-MM-DD".
+func Today() string {
 	return time.Now().UTC().Format("2006-01-02")
 }
 

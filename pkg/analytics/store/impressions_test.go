@@ -66,7 +66,7 @@ func TestImpressionType(t *testing.T) {
 // --- NewImpressions ---
 
 func TestNewImpressions(t *testing.T) {
-	day := today()
+	day := Today()
 
 	tests := []struct {
 		name    string

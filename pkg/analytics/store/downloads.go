@@ -38,7 +38,7 @@ func DownloadSource(h http.Header) Source {
 func NewDownload(country string, header http.Header, hash blossom.Hash) Download {
 	return Download{
 		Hash:        hash,
-		Day:         today(),
+		Day:         Today(),
 		Source:      DownloadSource(header),
 		CountryCode: country,
 	}
