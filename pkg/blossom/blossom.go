@@ -64,14 +64,14 @@ func Setup(
 		AuthorNotAllowed(acl),
 	)
 
-	blossom.On.Check = Check(store)
+	blossom.On.Check = Check(store, analytics)
 	blossom.On.Download = Download(store, bunny, analytics)
-	blossom.On.Upload = Upload(store, bunny, limiter, config.StallTimeout)
+	blossom.On.Upload = Upload(store, bunny, limiter, config.StallTimeout, analytics)
 	return blossom, nil
 }
 
-func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
-	return func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
+func Check(db *store.Store, analytics *analytics.Engine) func(r blossy.Request, hash blossom.Hash, ext string) (blossy.MetaDelivery, *blossom.Error) {
+	return func(r blossy.Request, hash blossom.Hash, _ string) (blossy.MetaDelivery, *blossom.Error) {
 
 		// We can check the local store for the blob metadata instead of redirecting to Bunny.
 		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
@@ -85,6 +85,8 @@ func Check(db *store.Store) func(r blossy.Request, hash blossom.Hash, ext string
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hash)
 			return nil, ErrInternal
 		}
+
+		analytics.RecordCheck(r, hash)
 		return blossy.Found(meta.Type, meta.Size), nil
 	}
 }
@@ -128,7 +130,13 @@ func (s *stallReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTimeout time.Duration) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
+func Upload(
+	db *store.Store,
+	client bunny.Client,
+	limiter rate.Limiter,
+	stallTimeout time.Duration,
+	analytics *analytics.Engine,
+) func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 	return func(r blossy.Request, hints blossy.UploadHints, data io.Reader) (blossom.BlobDescriptor, *blossom.Error) {
 		if data == nil {
 			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("body is empty")
@@ -206,6 +214,7 @@ func Upload(db *store.Store, client bunny.Client, limiter rate.Limiter, stallTim
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
+		analytics.RecordUpload(r, hints)
 		return blossom.BlobDescriptor{
 			Hash:     *hints.Hash,
 			Type:     hints.Type,

@@ -1,5 +1,8 @@
 // Package analytics provides an analytics [Engine] for collecting privacy-preserving statistics
 // useful for Zapstore developers to keep track of app usage.
+//
+// It also allows for the collection of internal metrics like number of events received.
+// Check analytics/store/schema.sql
 package analytics
 
 import (
@@ -8,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -35,10 +39,25 @@ type Engine struct {
 	pendingImpressions map[store.Impression]int // Impression --> count
 	pendingDownloads   map[store.Download]int   // Download --> count
 
+	relay   relayMetrics
+	blossom blossomMetrics
+
 	config Config
 	log    *slog.Logger
 	wg     sync.WaitGroup
 	done   chan struct{}
+}
+
+type relayMetrics struct {
+	reqs    atomic.Int64
+	filters atomic.Int64
+	events  atomic.Int64
+}
+
+type blossomMetrics struct {
+	checks    atomic.Int64
+	downloads atomic.Int64
+	uploads   atomic.Int64
 }
 
 // NewEngine starts the background goroutine and returns the engine.
@@ -114,10 +133,12 @@ func (e *Engine) lookupCountry(ip net.IP) string {
 	return country
 }
 
-// RecordImpressions records the impressions derived from the given REQ (id, filters),
-// and the nostr events served in response to it.
-// The client IP address is only used to lookup the country of the client.
-func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.Filters, events []nostr.Event) {
+// RecordReq records the REQ and the derived impressions.
+// The client IP address is only used to lookup the country of the client for analytics purposes.
+func (e *Engine) RecordReq(client rely.Client, id string, filters nostr.Filters, events []nostr.Event) {
+	e.relay.reqs.Add(1)
+	e.relay.filters.Add(int64(len(filters)))
+
 	country := e.lookupCountry(client.IP().Raw)
 	impressions := store.NewImpressions(country, id, filters, events)
 
@@ -132,9 +153,21 @@ func (e *Engine) RecordImpressions(client rely.Client, id string, filters nostr.
 	}
 }
 
+// RecordEvent records the event.
+func (e *Engine) RecordEvent(_ rely.Client, _ *nostr.Event) {
+	e.relay.events.Add(1)
+}
+
+// RecordCheck records the check.
+func (e *Engine) RecordCheck(_ blossy.Request, _ blossom.Hash) {
+	e.blossom.checks.Add(1)
+}
+
 // RecordDownload records the download of the given hash by the given request.
-// The client IP address is only used to lookup the country of the client.
+// The client IP address is only used to lookup the country of the client for analytics purposes.
 func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
+	e.blossom.downloads.Add(1)
+
 	country := e.lookupCountry(r.IP().Raw)
 	download := store.NewDownload(country, r.Raw().Header, hash)
 
@@ -144,6 +177,11 @@ func (e *Engine) RecordDownload(r blossy.Request, hash blossom.Hash) {
 		e.log.Warn("analytics: failed to record download", "error", "channel is full")
 		return
 	}
+}
+
+// RecordUpload records the upload of a blob with the given upload hints.
+func (e *Engine) RecordUpload(_ blossy.Request, _ blossy.UploadHints) {
+	e.blossom.uploads.Add(1)
 }
 
 func (e *Engine) run() {
@@ -161,10 +199,10 @@ func (e *Engine) run() {
 		select {
 		case <-e.done:
 			e.drain()
+			e.log.Info("analytics: flushing all pending data...")
 			if err := e.flushAll(); err != nil {
 				e.log.Error("analytics: failed to flush", "err", err)
 			}
-			e.log.Info("analytics: flushed all pending data")
 
 			if err := e.store.Close(); err != nil {
 				e.log.Error("analytics: failed to close database", "err", err)
@@ -228,6 +266,13 @@ func (e *Engine) flushAll() error {
 		if err := e.flushDownloads(); err != nil {
 			return fmt.Errorf("failed to flush downloads: %w", err)
 		}
+	}
+
+	if err := e.flushRelayMetrics(); err != nil {
+		return fmt.Errorf("failed to flush relay metrics: %w", err)
+	}
+	if err := e.flushBlossomMetrics(); err != nil {
+		return fmt.Errorf("failed to flush blossom metrics: %w", err)
 	}
 	return nil
 }
@@ -300,6 +345,48 @@ func (e *Engine) flushDownloads() error {
 
 	for _, f := range flushed {
 		delete(e.pendingDownloads, f.Download)
+	}
+	return nil
+}
+
+// flushRelayMetrics flushes relay metrics to the database.
+func (e *Engine) flushRelayMetrics() error {
+	// For the sake of simplicity, metrics are always attributed to the current day.
+	// This will cause improper attribution around midnight, up to e.config.FlushInterval.
+	// If that's short (e.g. 5 minutes), the error will be really small overall.
+	metrics := store.RelayMetrics{
+		Day:     store.Today(),
+		Reqs:    e.relay.reqs.Swap(0),
+		Filters: e.relay.filters.Swap(0),
+		Events:  e.relay.events.Swap(0),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), e.config.FlushTimeout)
+	defer cancel()
+
+	if err := e.store.SaveRelayMetrics(ctx, metrics); err != nil {
+		return fmt.Errorf("failed to save relay metrics: %w", err)
+	}
+	return nil
+}
+
+// flushBlossomMetrics flushes blossom metrics to the database.
+func (e *Engine) flushBlossomMetrics() error {
+	// For the sake of simplicity, metrics are always attributed to the current day.
+	// This will cause improper attribution around midnight, up to e.config.FlushInterval.
+	// If that's short (e.g. 5 minutes), the error will be really small overall.
+	metrics := store.BlossomMetrics{
+		Day:       store.Today(),
+		Checks:    e.blossom.checks.Swap(0),
+		Downloads: e.blossom.downloads.Swap(0),
+		Uploads:   e.blossom.uploads.Swap(0),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), e.config.FlushTimeout)
+	defer cancel()
+
+	if err := e.store.SaveBlossomMetrics(ctx, metrics); err != nil {
+		return fmt.Errorf("failed to save blossom metrics: %w", err)
 	}
 	return nil
 }
