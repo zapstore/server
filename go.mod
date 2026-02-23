@@ -17,6 +17,7 @@ require (
 	github.com/pippellia-btc/rely v1.5.0
 	github.com/pippellia-btc/smallset v0.4.2
 	github.com/vertex-lab/nostr-sqlite v0.6.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
