@@ -24,6 +24,10 @@ type BlossomMetrics struct {
 // SaveRelayMetrics writes the given relay metrics to the database for the given day.
 // On conflict it increments the existing counters.
 func (s *Store) SaveRelayMetrics(ctx context.Context, m RelayMetrics) error {
+	if m.Reqs == 0 && m.Filters == 0 && m.Events == 0 {
+		return nil
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO relay_metrics (day, reqs, filters, events)
 		VALUES (?, ?, ?, ?)
@@ -42,6 +46,10 @@ func (s *Store) SaveRelayMetrics(ctx context.Context, m RelayMetrics) error {
 // SaveBlossomMetrics writes the given blossom metrics to the database for the given day.
 // On conflict it increments the existing counters.
 func (s *Store) SaveBlossomMetrics(ctx context.Context, m BlossomMetrics) error {
+	if m.Checks == 0 && m.Downloads == 0 && m.Uploads == 0 {
+		return nil
+	}
+
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO blossom_metrics (day, checks, downloads, uploads)
 		VALUES (?, ?, ?, ?)
