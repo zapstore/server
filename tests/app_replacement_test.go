@@ -56,4 +56,6 @@ func TestAppReplacement(t *testing.T) {
 	}
 
 	// manually check if the replacement was successful
+	// SELECT * FROM apps WHERE kind = 32267 AND created_at = 1000;
+	// SELECT * FROM apps WHERE kind = 32267 AND created_at = 1001;
 }
