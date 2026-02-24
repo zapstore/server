@@ -154,7 +154,9 @@ func Upload(
 				Uploaded: meta.CreatedAt.Unix(),
 			}, nil
 		}
-
+		if errors.Is(err, context.Canceled) {
+			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("context canceled")
+		}
 		if err != nil && !errors.Is(err, store.ErrBlobNotFound) {
 			// internal error
 			slog.Error("blossom: failed to query blob metadata", "error", err, "hash", hints.Hash)
@@ -184,19 +186,26 @@ func Upload(
 			limiter.Penalize(r.IP().Group(), cost)
 			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("checksum mismatch")
 		}
-
-		if err != nil && !errors.Is(err, context.Canceled) {
-			slog.Error("blossom: failed to upload blob", "error", err, "name", name)
+		if errors.Is(err, context.Canceled) {
+			return blossom.BlobDescriptor{}, blossom.ErrBadRequest("context canceled")
+		}
+		if err != nil {
+			slog.Error("blossom: failed to upload blob", "error", err, "name", name, "ctx_error", ctx.Err(), "ctx_cause", context.Cause(ctx))
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
-		_, size, err := client.Check(ctx, name)
-		if err != nil && !errors.Is(err, context.Canceled) {
+		// Use a fresh context for the remaining operations to avoid orphaning
+		// blobs in Bunny if the client disconnects after the upload completes.
+		saveCtx, saveCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer saveCancel()
+
+		_, size, err := client.Check(saveCtx, name)
+		if err != nil {
 			slog.Error("blossom: failed to check blob", "error", err, "name", name)
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
 
-		// punish the client if it provided bad hints.
+		// punish the client for providing bad hints.
 		if hints.Size < size {
 			cost := 100.0
 			limiter.Penalize(r.IP().Group(), cost)
@@ -209,8 +218,8 @@ func Upload(
 			CreatedAt: time.Now().UTC(),
 		}
 
-		_, err = db.Save(ctx, meta)
-		if err != nil && !errors.Is(err, context.Canceled) {
+		_, err = db.Save(saveCtx, meta)
+		if err != nil {
 			slog.Error("blossom: failed to save blob metadata", "error", err, "hash", hints.Hash)
 			return blossom.BlobDescriptor{}, ErrInternal
 		}
