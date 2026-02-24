@@ -18,6 +18,7 @@ import (
 	"github.com/zapstore/server/pkg/analytics"
 	"github.com/zapstore/server/pkg/events"
 	"github.com/zapstore/server/pkg/rate"
+	"github.com/zapstore/server/pkg/relay/store"
 )
 
 var (
@@ -82,31 +83,31 @@ func Setup(
 	return relay, nil
 }
 
-func Save(store *sqlite.Store, analytics *analytics.Engine) func(c rely.Client, event *nostr.Event) error {
+func Save(db *sqlite.Store, analytics *analytics.Engine) func(c rely.Client, event *nostr.Event) error {
 	return func(c rely.Client, event *nostr.Event) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		switch {
 		case event.Kind == nostr.KindDeletion:
-			if _, err := store.DeleteRequest(ctx, event); err != nil {
+			if _, err := db.DeleteRequest(ctx, event); err != nil {
 				slog.Error("relay: failed to fulfill the delete request", "error", err, "event", event.ID)
 				return err
 			}
 
-			if _, err := store.Save(ctx, event); err != nil {
+			if _, err := db.Save(ctx, event); err != nil {
 				slog.Error("relay: failed to save the delete request", "error", err, "event", event.ID)
 				return err
 			}
 
 		case nostr.IsRegularKind(event.Kind):
-			if _, err := store.Save(ctx, event); err != nil {
+			if _, err := db.Save(ctx, event); err != nil {
 				slog.Error("relay: failed to save the event", "error", err, "event", event.ID)
 				return err
 			}
 
 		case nostr.IsReplaceableKind(event.Kind) || nostr.IsAddressableKind(event.Kind):
-			if _, err := store.Replace(ctx, event); err != nil {
+			if _, err := db.Replace(ctx, event); err != nil {
 				slog.Error("relay: failed to replace the event", "error", err, "event", event.ID)
 				return err
 			}
@@ -117,12 +118,15 @@ func Save(store *sqlite.Store, analytics *analytics.Engine) func(c rely.Client, 
 	}
 }
 
-func Query(store *sqlite.Store, analytics *analytics.Engine) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
+func Query(db *sqlite.Store, analytics *analytics.Engine) func(ctx context.Context, c rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
 	return func(ctx context.Context, client rely.Client, id string, filters nostr.Filters) ([]nostr.Event, error) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		events, err := store.Query(ctx, filters...)
+		events, err := db.Query(ctx, filters...)
+		if errors.Is(err, store.ErrUnsupportedREQ) {
+			return nil, err
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Error("relay: failed to query events", "error", err, "filters", filters)
 			return nil, err

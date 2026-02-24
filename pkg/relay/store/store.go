@@ -15,6 +15,8 @@ import (
 	"github.com/zapstore/server/pkg/events"
 )
 
+var ErrUnsupportedREQ = errors.New("unsupported REQ")
+
 //go:embed schema.sql
 var schema string
 
@@ -40,12 +42,12 @@ func queryBuilder(filters ...nostr.Filter) ([]sqlite.Query, error) {
 	if len(filters) > 1 {
 		// We don't support multiple filters when one is using NIP-50 search because the order
 		// of the result events will inevitably be ambiguous.
-		return nil, errors.New("we support only one filter per REQ when using NIP-50 search")
+		return nil, fmt.Errorf("%w: there can only be one filter per REQ when using NIP-50 search", ErrUnsupportedREQ)
 	}
 
 	search := filters[0]
 	if !slices.Equal(search.Kinds, []int{events.KindApp}) {
-		return nil, fmt.Errorf("We only support NIP-50 search for kind %d", events.KindApp)
+		return nil, fmt.Errorf("%w: we allow NIP-50 search only for kind %d", ErrUnsupportedREQ, events.KindApp)
 	}
 	return appSearchQuery(search)
 }
@@ -65,8 +67,8 @@ func searchesIn(filters nostr.Filters) int {
 // Results are ordered by BM25 relevance with custom weights.
 func appSearchQuery(filter nostr.Filter) ([]sqlite.Query, error) {
 	if len(filter.Search) < 3 {
-		return nil, fmt.Errorf("search term must be at least 3 characters") // because of the trigram tokenizer
-
+		// Because of the trigram tokenizer, we need at least 3 characters to get a meaningful result.
+		return nil, fmt.Errorf("%w: search term must be at least 3 characters", ErrUnsupportedREQ)
 	}
 
 	filter.Search = escapeFTS5(filter.Search)
