@@ -23,7 +23,9 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/pippellia-btc/blossom"
 	"github.com/pippellia-btc/smallset"
+	"github.com/zapstore/server/pkg/acl/github"
 	"github.com/zapstore/server/pkg/acl/vertex"
+	"github.com/zapstore/server/pkg/events"
 )
 
 // Controller is an access control list that manages allowed/blocked pubkeys, ids, and blobs.
@@ -32,10 +34,11 @@ type Controller struct {
 	mu             sync.RWMutex
 	pubkeysAllowed *smallset.Ordered[string]
 	pubkeysBlocked *smallset.Ordered[string]
-	vertex         vertex.Filter
+	eventsBlocked  *smallset.Ordered[string]
+	blobsBlocked   *smallset.Ordered[string]
 
-	eventsBlocked *smallset.Ordered[string]
-	blobsBlocked  *smallset.Ordered[string]
+	vertex vertex.Filter
+	github github.Client
 
 	log     *slog.Logger
 	watcher *fsnotify.Watcher
@@ -76,6 +79,8 @@ func New(c Config, dir string, log *slog.Logger) (*Controller, error) {
 	if c.UnknownPubkeyPolicy == UseVertex {
 		acl.vertex = vertex.NewFilter(c.Vertex)
 	}
+
+	acl.github = github.NewClient(c.Github)
 
 	if _, err = acl.reloadAllowedPubkeys(); err != nil {
 		return nil, fmt.Errorf("failed to load allowed pubkeys: %w", err)
@@ -181,6 +186,92 @@ func (c *Controller) AllowPubkey(ctx context.Context, pubkey string) (bool, erro
 	}
 }
 
+// AllowEvent is like AllowPubkey, but applies verification using Github when Vertex doesn't allow.
+// TODO: this is a clusterfuck and should be redesigned.
+func (c *Controller) AllowEvent(ctx context.Context, e *nostr.Event) (bool, error) {
+	c.mu.RLock()
+	blocked := c.pubkeysBlocked.Contains(e.PubKey)
+	allowed := c.pubkeysAllowed.Contains(e.PubKey)
+	c.mu.RUnlock()
+
+	if blocked {
+		return false, nil
+	}
+
+	if allowed {
+		return true, nil
+	}
+
+	switch c.config.UnknownPubkeyPolicy {
+	case AllowAll:
+		return true, nil
+
+	case BlockAll:
+		return false, nil
+
+	case UseVertex:
+		allow, err := c.vertex.Allow(ctx, e.PubKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to verify reputation: %w", err)
+		}
+
+		if allow {
+			return true, nil
+		}
+
+		// try to verify with github when vertex doesn't allow.
+		// TODO: this is a clusterfuck and should be redesigned.
+		if e.Kind != events.KindApp {
+			return false, nil
+		}
+
+		url, ok := events.Find(e.Tags, "repository")
+		if !ok {
+			return false, nil
+		}
+
+		repo, err := c.github.RepoInfo(ctx, url)
+		if err != nil {
+			return false, fmt.Errorf("failed to verify with repository: %w", err)
+		}
+
+		if repo.Pubkey != e.PubKey {
+			return false, nil
+		}
+		if time.Since(repo.CreatedAt) < 24*time.Hour {
+			return false, nil
+		}
+		if err := c.appendAllowedPubkey(e.PubKey, fmt.Sprintf("verified via github repo %s", url)); err != nil {
+			return false, fmt.Errorf("failed to append pubkey to allowed list: %w", err)
+		}
+		return true, nil
+
+	default:
+		return false, fmt.Errorf("internal error: unknown pubkey policy: %s", c.config.UnknownPubkeyPolicy)
+	}
+}
+
+// appendAllowedPubkey appends a pubkey to the allowed pubkeys CSV file.
+// The file watcher will pick up the change and reload the list automatically.
+func (c *Controller) appendAllowedPubkey(pubkey, reason string) error {
+	csvPath := filepath.Join(c.dir, PubkeysAllowedFile)
+	f, err := os.OpenFile(csvPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %w", PubkeysAllowedFile, err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	if err := w.Write([]string{pubkey, reason}); err != nil {
+		return fmt.Errorf("failed to write to %s: %w", PubkeysAllowedFile, err)
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return fmt.Errorf("failed to flush %s: %w", PubkeysAllowedFile, err)
+	}
+	return nil
+}
+
 // IsEventBlocked checks if an event ID is in the blocked list.
 func (c *Controller) IsEventBlocked(ID string) bool {
 	c.mu.RLock()
@@ -193,34 +284,6 @@ func (c *Controller) IsBlobBlocked(hash blossom.Hash) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.blobsBlocked.Contains(hash.Hex())
-}
-
-// AllowedPubkeys returns a copy of the current allowed pubkeys list.
-func (c *Controller) AllowedPubkeys() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.pubkeysAllowed.Items()
-}
-
-// BlockedPubkeys returns a copy of the current blocked pubkeys list.
-func (c *Controller) BlockedPubkeys() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.pubkeysBlocked.Items()
-}
-
-// BlockedEvents returns a copy of the current blocked ids list.
-func (c *Controller) BlockedEvents() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.eventsBlocked.Items()
-}
-
-// BlockedBlobs returns a copy of the current blocked blobs list.
-func (c *Controller) BlockedBlobs() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.blobsBlocked.Items()
 }
 
 // watch monitors the ACL directory for file changes and reloads the changed file.

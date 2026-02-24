@@ -15,9 +15,7 @@ import (
 //
 // Then edit files in pkg/acl/testdata/ to see reload logs.
 func TestManualHotReload(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping manual test in short mode")
-	}
+	// t.Skip("skipping manual test")
 
 	dir := "testdata"
 	defer os.RemoveAll(dir)
@@ -34,10 +32,10 @@ func TestManualHotReload(t *testing.T) {
 	defer controller.Close()
 
 	t.Logf("watching %s for 30 seconds...", dir)
-	t.Logf("allowed_pubkeys: %d", len(controller.AllowedPubkeys()))
-	t.Logf("blocked_pubkeys: %d", len(controller.BlockedPubkeys()))
-	t.Logf("blocked_events: %d", len(controller.BlockedEvents()))
-	t.Logf("blocked_blobs: %d", len(controller.BlockedBlobs()))
+	t.Logf("allowed_pubkeys: %d", controller.pubkeysAllowed.Size())
+	t.Logf("blocked_pubkeys: %d", controller.pubkeysBlocked.Size())
+	t.Logf("blocked_events: %d", controller.eventsBlocked.Size())
+	t.Logf("blocked_blobs: %d", controller.blobsBlocked.Size())
 	time.Sleep(30 * time.Second)
 }
 

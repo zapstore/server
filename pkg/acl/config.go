@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/zapstore/server/pkg/acl/github"
 	"github.com/zapstore/server/pkg/acl/vertex"
 )
 
@@ -44,6 +45,9 @@ type Config struct {
 
 	// Vertex is the configuration for the Vertex DVM, used when PubkeyPolicy is "VERTEX".
 	Vertex vertex.Config
+
+	// Github is the configuration for the Github API.
+	Github github.Config
 }
 
 // NewConfig creates a new Config with default values.
@@ -51,6 +55,7 @@ func NewConfig() Config {
 	return Config{
 		UnknownPubkeyPolicy: UseVertex,
 		Vertex:              vertex.NewConfig(),
+		Github:              github.NewConfig(),
 	}
 }
 
@@ -65,6 +70,10 @@ func (c Config) Validate() error {
 			return fmt.Errorf("vertex: %w", err)
 		}
 	}
+
+	if err := c.Github.Validate(); err != nil {
+		return fmt.Errorf("github: %w", err)
+	}
 	return nil
 }
 
@@ -77,5 +86,7 @@ func (c Config) String() string {
 	if c.UnknownPubkeyPolicy == UseVertex {
 		s += c.Vertex.String()
 	}
+
+	s += c.Github.String()
 	return s
 }

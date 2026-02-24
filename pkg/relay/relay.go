@@ -300,7 +300,7 @@ func AuthorNotAllowed(acl *acl.Controller) func(_ rely.Client, e *nostr.Event) e
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		allow, err := acl.AllowPubkey(ctx, e.PubKey)
+		allow, err := acl.AllowEvent(ctx, e)
 		if err != nil {
 			// fail closed policy;
 			slog.Error("relay: failed to check if pubkey is allowed", "error", err)

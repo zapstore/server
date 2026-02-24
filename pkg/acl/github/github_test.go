@@ -21,7 +21,7 @@ func TestRepoInfo(t *testing.T) {
 	expected := RepoInfo{
 		CreatedAt: time.Unix(1771865178, 0).UTC(),
 		Stars:     0,
-		Pubkey:    "f683e87035f7ad4f44e0b98cfbd9537e16455a92cd38cefc4cb31db7557f5ef2",
+		Pubkey:    "8d555b569d5c4c28c7d489e1d581248b1469d3fce288f32d50dbc53869f32e0e",
 	}
 
 	if info != expected {

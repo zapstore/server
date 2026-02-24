@@ -35,8 +35,8 @@ type Client struct {
 }
 
 // NewClient creates a new Client with the given configuration.
-func NewClient(c Config) *Client {
-	return &Client{
+func NewClient(c Config) Client {
+	return Client{
 		http:   &http.Client{Timeout: c.Timeout},
 		config: c,
 	}
